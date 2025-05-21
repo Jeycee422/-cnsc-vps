@@ -1,10 +1,96 @@
+'use client';
+
+import { useState } from 'react';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Line, Bar, Doughnut } from 'react-chartjs-2';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
 export default function Dashboard() {
+  // Mock data for charts
+  const monthlyData = {
+    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+    datasets: [
+      {
+        label: 'Applications',
+        data: [65, 59, 80, 81, 56, 55],
+        borderColor: '#7E0303',
+        backgroundColor: 'rgba(126, 3, 3, 0.1)',
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const vehicleTypeData = {
+    labels: ['Car', 'Motorcycle', 'Other'],
+    datasets: [
+      {
+        data: [65, 25, 10],
+        backgroundColor: [
+          '#7E0303',
+          '#FFA07A',
+          '#98FB98',
+        ],
+      },
+    ],
+  };
+
+  const statusData = {
+    labels: ['Pending', 'Approved', 'Rejected'],
+    datasets: [
+      {
+        data: [24, 156, 12],
+        backgroundColor: [
+          '#FCD34D',
+          '#34D399',
+          '#F87171',
+        ],
+      },
+    ],
+  };
+
+  const userTypeData = {
+    labels: ['Students', 'Faculty', 'Staff', 'Visitors'],
+    datasets: [
+      {
+        data: [45, 30, 20, 5],
+        backgroundColor: [
+          '#7E0303',
+          '#FFA07A',
+          '#98FB98',
+          '#87CEEB',
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
       
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-[#7E0303] bg-opacity-10">
@@ -15,6 +101,7 @@ export default function Dashboard() {
             <div className="ml-4">
               <h2 className="text-sm font-medium text-gray-600">Pending Applications</h2>
               <p className="text-2xl font-semibold text-gray-900">24</p>
+              <p className="text-xs text-gray-500 mt-1">Awaiting review</p>
             </div>
           </div>
         </div>
@@ -27,8 +114,9 @@ export default function Dashboard() {
               </svg>
             </div>
             <div className="ml-4">
-              <h2 className="text-sm font-medium text-gray-600">Approved Passes</h2>
+              <h2 className="text-sm font-medium text-gray-600">Active Vehicle Passes</h2>
               <p className="text-2xl font-semibold text-gray-900">156</p>
+              <p className="text-xs text-gray-500 mt-1">Currently registered</p>
             </div>
           </div>
         </div>
@@ -43,8 +131,119 @@ export default function Dashboard() {
             <div className="ml-4">
               <h2 className="text-sm font-medium text-gray-600">Today's Registrations</h2>
               <p className="text-2xl font-semibold text-gray-900">12</p>
+              <p className="text-xs text-gray-500 mt-1">New applications</p>
             </div>
           </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-3 rounded-full bg-[#7E0303] bg-opacity-10">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <h2 className="text-sm font-medium text-gray-600">Expiring Soon</h2>
+              <p className="text-2xl font-semibold text-gray-900">8</p>
+              <p className="text-xs text-gray-500 mt-1">Next 7 days</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Additional Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Application Status</h2>
+          <div className="h-80">
+            <Doughnut
+              data={statusData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'right' as const,
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Monthly Applications Trend */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Monthly Applications</h2>
+          <div className="h-80">
+            <Line
+              data={monthlyData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'top' as const,
+                  },
+                },
+                scales: {
+                  y: {
+                    beginAtZero: true,
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Vehicle Type Distribution */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Vehicle Type Distribution</h2>
+          <div className="h-80">
+            <Doughnut
+              data={vehicleTypeData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'right' as const,
+                  },
+                },
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* User Type Distribution */}
+      <div className="bg-white rounded-lg shadow p-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">User Type Distribution</h2>
+        <div className="h-80">
+          <Bar
+            data={userTypeData}
+            options={{
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: {
+                  display: false
+                },
+              },
+              scales: {
+                y: {
+                  beginAtZero: true,
+                  max: 100,
+                  ticks: {
+                    callback: (value) => `${value}%`
+                  }
+                }
+              }
+            }}
+          />
         </div>
       </div>
 
@@ -85,28 +284,6 @@ export default function Dashboard() {
               icon: (
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-              )
-            },
-            {
-              type: 'Pass Renewed',
-              user: 'Sarah Wilson',
-              id: '2023-1237',
-              time: '5 hours ago',
-              icon: (
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              )
-            },
-            {
-              type: 'Application Updated',
-              user: 'David Brown',
-              id: '2023-1238',
-              time: '6 hours ago',
-              icon: (
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               )
             }

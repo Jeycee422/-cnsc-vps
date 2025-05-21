@@ -38,18 +38,18 @@ export default function SignIn() {
   });
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    // Check if user is already logged in
-    const userData = localStorage.getItem('user');
-    if (userData) {
-      const user = JSON.parse(userData);
-      if (user.role === 'admin') {
-        router.push('/admin/dashboard');
-      } else {
-        router.push('/user/home');
-      }
-    }
-  }, [router]);
+  // useEffect(() => {
+  //   // Check if user is already logged in
+  //   const userData = localStorage.getItem('user');
+  //   if (userData) {
+  //     const user = JSON.parse(userData);
+  //     if (user.role === 'admin') {
+  //       router.push('/admin/dashboard');
+  //     } else {
+  //       router.push('/user/home');
+  //     }
+  //   }
+  // }, [router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,12 +63,12 @@ export default function SignIn() {
     }
 
     // Store user info in localStorage
-    const userData = {
-      email: formData.email,
-      role: user.role,
-      name: user.name
-    };
-    localStorage.setItem('user', JSON.stringify(userData));
+    // const userData = {
+    //   email: formData.email,
+    //   role: user.role,
+    //   name: user.name
+    // };
+    // localStorage.setItem('user', JSON.stringify(userData));
 
     // Redirect based on role
     if (user.role === 'admin') {

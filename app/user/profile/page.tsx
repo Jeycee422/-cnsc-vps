@@ -28,26 +28,26 @@ export default function Profile() {
   });
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  useEffect(() => {
-    // Check if user is logged in
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/signin');
-      return;
-    }
+  // useEffect(() => {
+  //   // Check if user is logged in
+  //   const userData = localStorage.getItem('user');
+  //   if (!userData) {
+  //     router.push('/signin');
+  //     return;
+  //   }
 
-    const user = JSON.parse(userData);
-    setUser(user);
-    // Initialize form data with user data
-    setFormData(prev => ({
-      ...prev,
-      name: user.name || '',
-      email: user.email || '',
-      idNumber: user.idNumber || '',
-      phoneNumber: user.phoneNumber || '',
-      department: user.department || ''
-    }));
-  }, [router]);
+  //   const user = JSON.parse(userData);
+  //   setUser(user);
+  //   // Initialize form data with user data
+  //   setFormData(prev => ({
+  //     ...prev,
+  //     name: user.name || '',
+  //     email: user.email || '',
+  //     idNumber: user.idNumber || '',
+  //     phoneNumber: user.phoneNumber || '',
+  //     department: user.department || ''
+  //   }));
+  // }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;

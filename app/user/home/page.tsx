@@ -13,32 +13,32 @@ export default function Home() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
 
-  useEffect(() => {
-    // Check if user is logged in
-    const userData = localStorage.getItem('user');
-    if (!userData) {
-      router.push('/signin');
-      return;
-    }
+  // useEffect(() => {
+  //   // Check if user is logged in
+  //   const userData = localStorage.getItem('user');
+  //   if (!userData) {
+  //     router.push('/signin');
+  //     return;
+  //   }
 
-    const user = JSON.parse(userData);
-    setUser(user);
-  }, [router]);
+  //   const user = JSON.parse(userData);
+  //   setUser(user);
+  // }, [router]);
 
-  if (!user) {
-    return null;
-  }
+  // if (!user) {
+  //   return null;
+  // }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Welcome back, {user.name}</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Welcome back, User</h1>
           <p className="text-gray-600">Here's an overview of your vehicle pass</p>
         </div>
         <button
           onClick={() => {
-            localStorage.removeItem('user');
+            // localStorage.removeItem('user');
             router.push('/signin');
           }}
           className="px-4 py-2 text-[#7E0303] border-2 border-[#7E0303] rounded-md hover:bg-[#7E0303] hover:text-white transition-colors"
