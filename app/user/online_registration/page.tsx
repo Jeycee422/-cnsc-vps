@@ -1,6 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
+
+interface Document {
+  id: string;
+  name: string;
+  file: File;
+  type: 'orcr' | 'license';
+}
 
 export default function Registration() {
   const [formData, setFormData] = useState({
@@ -22,6 +30,40 @@ export default function Registration() {
     endDate: '',
   });
 
+  const [documents, setDocuments] = useState<Document[]>([]);
+
+  const onDrop = useCallback((acceptedFiles: File[], type: 'orcr' | 'license') => {
+    const newDocuments = acceptedFiles.map(file => ({
+      id: Math.random().toString(36).substr(2, 9),
+      name: file.name,
+      file,
+      type
+    }));
+    setDocuments(prev => [...prev, ...newDocuments]);
+  }, []);
+
+  const { getRootProps: getOrcrRootProps, getInputProps: getOrcrInputProps, isDragActive: isOrcrDragActive } = useDropzone({
+    onDrop: (files) => onDrop(files, 'orcr'),
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg'],
+      'application/pdf': ['.pdf']
+    },
+    maxSize: 5242880 // 5MB
+  });
+
+  const { getRootProps: getLicenseRootProps, getInputProps: getLicenseInputProps, isDragActive: isLicenseDragActive } = useDropzone({
+    onDrop: (files) => onDrop(files, 'license'),
+    accept: {
+      'image/*': ['.png', '.jpg', '.jpeg'],
+      'application/pdf': ['.pdf']
+    },
+    maxSize: 5242880 // 5MB
+  });
+
+  const removeDocument = (id: string) => {
+    setDocuments(prev => prev.filter(doc => doc.id !== id));
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -33,7 +75,7 @@ export default function Registration() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Handle form submission
-    console.log('Form submitted:', formData);
+    console.log('Form submitted:', { ...formData, documents });
   };
 
   return (
@@ -209,6 +251,155 @@ export default function Registration() {
             </div>
           </div>
 
+          {/* Required Documents */}
+          <div className="border-b border-gray-200 pb-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Required Documents</h2>
+            <p className="text-sm text-gray-600 mb-4">Upload your ORCR and driver's license. Maximum file size: 5MB</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* ORCR Upload */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">ORCR Document</h3>
+                <div
+                  {...getOrcrRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isOrcrDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                  }`}
+                >
+                  <input {...getOrcrInputProps()} />
+                  <div className="space-y-2">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <div className="text-sm text-gray-600">
+                      {isOrcrDragActive ? (
+                        <p>Drop the ORCR here ...</p>
+                      ) : (
+                        <p>
+                          Drag and drop your ORCR here, or{' '}
+                          <span className="text-[#7E0303] font-medium">click to select file</span>
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, PDF up to 5MB</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Driver's License Upload */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Driver's License</h3>
+                <div
+                  {...getLicenseRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isLicenseDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                  }`}
+                >
+                  <input {...getLicenseInputProps()} />
+                  <div className="space-y-2">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <div className="text-sm text-gray-600">
+                      {isLicenseDragActive ? (
+                        <p>Drop the license here ...</p>
+                      ) : (
+                        <p>
+                          Drag and drop your license here, or{' '}
+                          <span className="text-[#7E0303] font-medium">click to select file</span>
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">PNG, JPG, PDF up to 5MB</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Document List */}
+            {documents.length > 0 && (
+              <div className="mt-6 space-y-4">
+                <h3 className="text-sm font-medium text-gray-900">Uploaded Documents</h3>
+                <div className="space-y-2">
+                  {documents.map(doc => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <svg
+                          className="h-5 w-5 text-gray-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                          />
+                        </svg>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {doc.name}
+                            <span className="ml-2 text-xs text-gray-500">
+                              ({doc.type === 'orcr' ? 'ORCR' : 'Driver\'s License'})
+                            </span>
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {(doc.file.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeDocument(doc.id)}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        <svg
+                          className="h-5 w-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Pass Information */}
           <div>
             <h2 className="text-lg font-medium text-gray-900 mb-4">Pass Information</h2>
@@ -270,18 +461,12 @@ export default function Registration() {
             </div>
           </div>
 
-          <div className="flex justify-end space-x-4">
-            <button
-              type="button"
-              className="px-4 py-2 border-2 border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:outline-none"
-            >
-              Cancel
-            </button>
+          <div className="flex justify-end">
             <button
               type="submit"
-              className="px-4 py-2 bg-[#7E0303] text-white rounded-md hover:bg-[#5E0202] focus:outline-none"
+              className="px-6 py-3 bg-[#7E0303] text-white rounded-md hover:bg-[#5E0202] transition-colors"
             >
-              Register Vehicle
+              Submit Registration
             </button>
           </div>
         </form>
