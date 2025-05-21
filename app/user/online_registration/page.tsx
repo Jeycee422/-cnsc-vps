@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 
 interface Document {
@@ -29,6 +29,23 @@ export default function Registration() {
     startDate: '',
     endDate: '',
   });
+
+  // Auto-fill personal information with dummy data
+  useEffect(() => {
+    const dummyData = {
+      firstName: 'John',
+      lastName: 'Doe',
+      email: 'john.doe@example.com',
+      phone: '09123456789',
+      idNumber: '2024-0001',
+      userType: 'student'
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      ...dummyData
+    }));
+  }, []);
 
   const [documents, setDocuments] = useState<Document[]>([]);
 
