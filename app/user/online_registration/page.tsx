@@ -39,7 +39,7 @@ export default function Registration() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">On-Site Registration</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Online Registration</h1>
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
