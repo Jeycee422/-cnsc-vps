@@ -7,49 +7,81 @@ interface Document {
   id: string;
   name: string;
   file: File;
-  type: 'orcr' | 'license';
+  type: 'orCrCopy' | 'driversLicenseCopy';
 }
 
 export default function Registration() {
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    applicantFamilyName: '',
+    applicantGivenName: '',
+    applicantMiddleName: '',
+    homeAddress: '',
+    schoolAffiliation: 'student',
+    otherAffiliation: '',
     idNumber: '',
-    userType: 'student', // student, faculty, staff, visitor
-    vehicleType: 'car', // car, motorcycle, other
-    plateNumber: '',
-    brand: '',
-    model: '',
-    color: '',
-    year: '',
+    contactNumber: '',
+    employmentStatus: 'Permanent',
+    company: '',
     purpose: '',
-    duration: 'temporary', // temporary, permanent
+    guardianName: '',
+    guardianAddress: '',
+    vehicleUserType: 'owner',
+    vehicleType: 'Motorcycle',
+    plateNumber: '',
+    orNumber: '',
+    crNumber: '',
+    driverName: '',
+    driverLicense: '',
+    duration: 'temporary',
     startDate: '',
-    endDate: '',
+    endDate: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  // Auto-fill personal information with dummy data
+  // Prefill from authenticated user profile
   useEffect(() => {
-    const dummyData = {
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john.doe@example.com',
-      phone: '09123456789',
-      idNumber: '2024-0001',
-      userType: 'student'
+    const ac = new AbortController();
+    const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
+    if (!token) return;
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+    const load = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/auth/me`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          signal: ac.signal
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Handle the response structure: { user: { id, firstName, lastName, email, role, ... } }
+        const userData = data.user || data;
+        setFormData(prev => ({
+          ...prev,
+          applicantFamilyName: userData.lastName || prev.applicantFamilyName,
+          applicantGivenName: userData.firstName || prev.applicantGivenName,
+          applicantMiddleName: userData.middleName || prev.applicantMiddleName,
+          homeAddress: userData.address || prev.homeAddress,
+          schoolAffiliation: (userData.affiliation === 'others' ? 'other' : (userData.affiliation || prev.schoolAffiliation)),
+          contactNumber: userData.phoneNumber || userData.phone || prev.contactNumber,
+          idNumber: userData.idNumber || prev.idNumber,
+        }));
+      } catch (_) {
+        // ignore prefill errors
+      }
     };
-
-    setFormData(prev => ({
-      ...prev,
-      ...dummyData
-    }));
+    load();
+    return () => ac.abort();
   }, []);
+
+  // Removed dummy autofill; use real user context if needed
 
   const [documents, setDocuments] = useState<Document[]>([]);
 
-  const onDrop = useCallback((acceptedFiles: File[], type: 'orcr' | 'license') => {
+  const onDrop = useCallback((acceptedFiles: File[], type: 'orCrCopy' | 'driversLicenseCopy') => {
     const newDocuments = acceptedFiles.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       name: file.name,
@@ -60,7 +92,7 @@ export default function Registration() {
   }, []);
 
   const { getRootProps: getOrcrRootProps, getInputProps: getOrcrInputProps, isDragActive: isOrcrDragActive } = useDropzone({
-    onDrop: (files) => onDrop(files, 'orcr'),
+    onDrop: (files) => onDrop(files, 'orCrCopy'),
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg'],
       'application/pdf': ['.pdf']
@@ -69,7 +101,7 @@ export default function Registration() {
   });
 
   const { getRootProps: getLicenseRootProps, getInputProps: getLicenseInputProps, isDragActive: isLicenseDragActive } = useDropzone({
-    onDrop: (files) => onDrop(files, 'license'),
+    onDrop: (files) => onDrop(files, 'driversLicenseCopy'),
     accept: {
       'image/*': ['.png', '.jpg', '.jpeg'],
       'application/pdf': ['.pdf']
@@ -89,10 +121,62 @@ export default function Registration() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', { ...formData, documents });
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      setIsSubmitting(true);
+      const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
+      if (!token) throw new Error('Not authenticated');
+
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const body = new FormData();
+
+      body.append('applicant[familyName]', formData.applicantFamilyName);
+      body.append('applicant[givenName]', formData.applicantGivenName);
+      if (formData.applicantMiddleName) body.append('applicant[middleName]', formData.applicantMiddleName);
+      body.append('homeAddress', formData.homeAddress);
+      body.append('schoolAffiliation', formData.schoolAffiliation);
+      if (formData.schoolAffiliation === 'other' && formData.otherAffiliation) body.append('otherAffiliation', formData.otherAffiliation);
+      body.append('idNumber', formData.idNumber);
+      body.append('contactNumber', formData.contactNumber);
+      body.append('employmentStatus', formData.employmentStatus.toLowerCase());
+      if (formData.company) body.append('company', formData.company);
+      if (formData.purpose) body.append('purpose', formData.purpose);
+      if (formData.guardianName) body.append('guardianName', formData.guardianName);
+      if (formData.guardianAddress) body.append('guardianAddress', formData.guardianAddress);
+
+      body.append('vehicleUserType', formData.vehicleUserType);
+      body.append('vehicleInfo[type]', formData.vehicleType);
+      body.append('vehicleInfo[plateNumber]', formData.plateNumber);
+      if (formData.orNumber) body.append('vehicleInfo[orNumber]', formData.orNumber);
+      if (formData.crNumber) body.append('vehicleInfo[crNumber]', formData.crNumber);
+      if (formData.driverName) body.append('driverName', formData.driverName);
+      if (formData.driverLicense) body.append('driverLicense', formData.driverLicense);
+
+      documents.forEach((doc) => {
+        body.append(doc.type, doc.file, doc.name);
+      });
+
+      const res = await fetch(`${API_BASE}/api/vehicle-passes/application`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to submit application');
+      }
+      await res.json();
+      setSuccessMessage('Application submitted successfully');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -103,60 +187,91 @@ export default function Registration() {
 
       <div className="bg-white rounded-lg shadow p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Personal Information */}
+          {(errorMessage || successMessage) && (
+            <div className={`text-sm ${errorMessage ? 'text-red-600' : 'text-green-600'}`}>
+              {errorMessage || successMessage}
+            </div>
+          )}
+          {/* Applicant Information */}
           <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h2>
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Applicant Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+                <label htmlFor="applicantFamilyName" className="block text-sm font-medium text-gray-700">Name of applicant: Family Name</label>
                 <input
                   type="text"
-                  id="firstName"
-                  name="firstName"
-                  value={formData.firstName}
+                  id="applicantFamilyName"
+                  name="applicantFamilyName"
+                  value={formData.applicantFamilyName}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+                <label htmlFor="applicantGivenName" className="block text-sm font-medium text-gray-700">Name of applicant: Given Name</label>
                 <input
                   type="text"
-                  id="lastName"
-                  name="lastName"
-                  value={formData.lastName}
+                  id="applicantGivenName"
+                  name="applicantGivenName"
+                  value={formData.applicantGivenName}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                <label htmlFor="applicantMiddleName" className="block text-sm font-medium text-gray-700">Name of applicant: Middle Name</label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="applicantMiddleName"
+                  name="applicantMiddleName"
+                  value={formData.applicantMiddleName}
                   onChange={handleChange}
-                  required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</label>
+              <div className="md:col-span-2">
+                <label htmlFor="homeAddress" className="block text-sm font-medium text-gray-700">Home Address</label>
                 <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  value={formData.phone}
+                  type="text"
+                  id="homeAddress"
+                  name="homeAddress"
+                  value={formData.homeAddress}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">ID Number</label>
+                <label htmlFor="schoolAffiliation" className="block text-sm font-medium text-gray-700">School's Affiliation</label>
+                <select
+                  id="schoolAffiliation"
+                  name="schoolAffiliation"
+                  value={formData.schoolAffiliation}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                >
+                  <option value="student">Student</option>
+                  <option value="personnel">Personnel</option>
+                  <option value="other">Others (Please Specify)</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="otherAffiliation" className="block text-sm font-medium text-gray-700">Others (Please Specify)</label>
+                <input
+                  type="text"
+                  id="otherAffiliation"
+                  name="otherAffiliation"
+                  value={formData.otherAffiliation}
+                  onChange={handleChange}
+                  disabled={formData.schoolAffiliation !== 'other'}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">ID Number: Student No. | Employee No.</label>
                 <input
                   type="text"
                   id="idNumber"
@@ -168,20 +283,75 @@ export default function Registration() {
                 />
               </div>
               <div>
-                <label htmlFor="userType" className="block text-sm font-medium text-gray-700">User Type</label>
-                <select
-                  id="userType"
-                  name="userType"
-                  value={formData.userType}
+                <label htmlFor="contactNumber" className="block text-sm font-medium text-gray-700">Contact Number</label>
+                <input
+                  type="tel"
+                  id="contactNumber"
+                  name="contactNumber"
+                  value={formData.contactNumber}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="employmentStatus" className="block text-sm font-medium text-gray-700">Status of Employment</label>
+                <select
+                  id="employmentStatus"
+                  name="employmentStatus"
+                  value={formData.employmentStatus}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 >
-                  <option value="student">Student</option>
-                  <option value="faculty">Faculty</option>
-                  <option value="staff">Staff</option>
-                  <option value="visitor">Visitor</option>
+                  <option value="Permanent">Permanent</option>
+                  <option value="Temporary">Temporary</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Job Order">Job Order</option>
                 </select>
+              </div>
+              <div>
+                <label htmlFor="company" className="block text-sm font-medium text-gray-700">Other Applicant: Company</label>
+                <input
+                  type="text"
+                  id="company"
+                  name="company"
+                  value={formData.company}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="purpose" className="block text-sm font-medium text-gray-700">Other Applicant: Purpose</label>
+                <textarea
+                  id="purpose"
+                  name="purpose"
+                  value={formData.purpose}
+                  onChange={handleChange}
+                  rows={3}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="guardianName" className="block text-sm font-medium text-gray-700">Name of Parent/Guardian (for student applicant)</label>
+                <input
+                  type="text"
+                  id="guardianName"
+                  name="guardianName"
+                  value={formData.guardianName}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label htmlFor="guardianAddress" className="block text-sm font-medium text-gray-700">Parent's/Guardian Address</label>
+                <input
+                  type="text"
+                  id="guardianAddress"
+                  name="guardianAddress"
+                  value={formData.guardianAddress}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
               </div>
             </div>
           </div>
@@ -217,54 +387,7 @@ export default function Registration() {
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Brand</label>
-                <input
-                  type="text"
-                  id="brand"
-                  name="brand"
-                  value={formData.brand}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="model" className="block text-sm font-medium text-gray-700">Model</label>
-                <input
-                  type="text"
-                  id="model"
-                  name="model"
-                  value={formData.model}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="color" className="block text-sm font-medium text-gray-700">Color</label>
-                <input
-                  type="text"
-                  id="color"
-                  name="color"
-                  value={formData.color}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="year" className="block text-sm font-medium text-gray-700">Year</label>
-                <input
-                  type="text"
-                  id="year"
-                  name="year"
-                  value={formData.year}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
+              
             </div>
           </div>
 
@@ -383,7 +506,7 @@ export default function Registration() {
                           <p className="text-sm font-medium text-gray-900">
                             {doc.name}
                             <span className="ml-2 text-xs text-gray-500">
-                              ({doc.type === 'orcr' ? 'ORCR' : 'Driver\'s License'})
+                              ({doc.type === 'orCrCopy' ? 'OR/CR' : 'Driver\'s License'})
                             </span>
                           </p>
                           <p className="text-xs text-gray-500">

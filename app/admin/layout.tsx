@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { io, Socket } from 'socket.io-client';
 
 export default function AdminLayout({
   children,
@@ -11,7 +12,56 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [notifications, setNotifications] = useState<Array<{ id: string; message: string; ts: string }>>([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [userRole, setUserRole] = useState<string>('');
+  const [userEmail, setUserEmail] = useState<string>('');
   const pathname = usePathname();
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const token = useMemo(() => (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '', []);
+
+  useEffect(() => {
+    if (!token) return;
+    const ac = new AbortController();
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/me`, {
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          signal: ac.signal
+        });
+        if (res.ok) {
+          const data = await res.json();
+          // Handle the response structure: { user: { id, firstName, lastName, email, role, ... } }
+          if (data.user) {
+            setUserRole(data.user.role || '');
+            setUserEmail(data.user.email || '');
+          }
+        }
+      } catch {}
+    })();
+    return () => ac.abort();
+  }, [API_BASE, token]);
+
+  useEffect(() => {
+    if (!token) return;
+    const socket: Socket = io(API_BASE, { auth: { token: `Bearer ${token}` } });
+    socket.on('vehiclePass:updated', ({ application }: { application: any }) => {
+      if (application?.status === 'approved') {
+        setNotifications(prev => [
+          { id: application._id, message: `Application approved: ${application.vehicleInfo?.plateNumber || application._id}`, ts: new Date().toISOString() },
+          ...prev
+        ].slice(0, 20));
+      }
+    });
+    return () => { socket.disconnect(); };
+  }, [API_BASE, token]);
+
+  const handleLogout = () => {
+    try { localStorage.removeItem('token'); } catch {}
+    window.location.href = '/signin';
+  };
 
   const navigation = [
     {
@@ -104,17 +154,54 @@ export default function AdminLayout({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <div className="flex items-center space-x-4">
-              <button className="p-1 rounded-md hover:bg-gray-100 focus:outline-none">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-              </button>
-              <button className="p-1 rounded-md hover:bg-gray-100 focus:outline-none">
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </button>
+            <div className="relative flex items-center space-x-4">
+              <div className="relative">
+                <button onClick={() => setIsNotifOpen(v => !v)} className="p-1 rounded-md hover:bg-gray-100 focus:outline-none">
+                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {notifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1">{notifications.length}</span>
+                  )}
+                </button>
+                {isNotifOpen && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white border rounded-md shadow-lg z-50 max-h-96 overflow-auto">
+                    <div className="p-3 border-b font-medium">Notifications</div>
+                    <ul className="divide-y">
+                      {notifications.length === 0 && (
+                        <li className="p-3 text-sm text-gray-500">No notifications</li>
+                      )}
+                      {notifications.map(n => (
+                        <li key={n.id} className="p-3 text-sm">
+                          <div className="text-gray-800">{n.message}</div>
+                          <div className="text-xs text-gray-500">{new Date(n.ts).toLocaleString()}</div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              <div className="relative">
+                <button onClick={() => setIsUserMenuOpen(v => !v)} className="p-1 rounded-md hover:bg-gray-100 focus:outline-none flex items-center space-x-2">
+                  <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  {(userRole || userEmail) && (
+                    <span className="text-sm text-gray-700 truncate max-w-[180px]">
+                      {userEmail}{userRole ? ` • ${userRole}` : ''}
+                    </span>
+                  )}
+                </button>
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border rounded-md shadow-lg z-50">
+                    <div className="px-4 py-3 border-b">
+                      <div className="text-sm font-medium text-gray-900 truncate">{userEmail || 'User'}</div>
+                      <div className="text-xs text-gray-500">{userRole || 'role'}</div>
+                    </div>
+                    <button onClick={handleLogout} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Logout</button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

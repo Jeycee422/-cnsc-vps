@@ -1,26 +1,48 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function Registration() {
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
+    applicantFamilyName: '',
+    applicantGivenName: '',
+    applicantMiddleName: '',
+    homeAddress: '',
+    schoolAffiliation: 'student',
+    otherAffiliation: '',
     idNumber: '',
-    userType: 'student', // student, faculty, staff, visitor
-    vehicleType: 'car', // car, motorcycle, other
+    contactNumber: '',
+    employmentStatus: 'Permanent',
+    company: 'n/a',
+    purpose: 'n/a',
+    guardianName: '',
+    guardianAddress: '',
+    vehicleUserType: 'owner',
+    vehicleType: 'Motorcycle',
     plateNumber: '',
-    brand: '',
-    model: '',
-    color: '',
-    year: '',
-    purpose: '',
-    duration: 'temporary', // temporary, permanent
-    startDate: '',
-    endDate: '',
+    orNumber: '',
+    crNumber: '',
+    driverName: '',
+    driverLicense: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | '' }>({ message: '', type: '' });
+  const [showToast, setShowToast] = useState(false);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (showToast) {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = setTimeout(() => {
+        setShowToast(false);
+      }, 4000);
+    }
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, [showToast]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -30,10 +52,59 @@ export default function Registration() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission
-    console.log('Form submitted:', formData);
+    setErrorMessage('');
+    setSuccessMessage('');
+    try {
+      setIsSubmitting(true);
+      const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
+      if (!token) throw new Error('Not authenticated');
+      const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const payload = {
+        familyName: formData.applicantFamilyName,
+        givenName: formData.applicantGivenName,
+        middleName: formData.applicantMiddleName || undefined,
+        homeAddress: formData.homeAddress,
+        schoolAffiliation: formData.schoolAffiliation,
+        otherAffiliation: formData.schoolAffiliation === 'other' ? (formData.otherAffiliation || undefined) : undefined,
+        idNumber: formData.idNumber,
+        contactNumber: formData.contactNumber,
+        employmentStatus: formData.schoolAffiliation === 'personnel' ? formData.employmentStatus.toLowerCase() : undefined,
+        company: formData.schoolAffiliation === 'other' ? (formData.company || undefined) : undefined,
+        purpose: formData.schoolAffiliation === 'other' ? (formData.purpose || undefined) : undefined,
+        guardianName: formData.schoolAffiliation === 'student' ? (formData.guardianName || undefined) : undefined,
+        guardianAddress: formData.schoolAffiliation === 'student' ? (formData.guardianAddress || undefined) : undefined,
+        vehicleUserType: formData.vehicleUserType,
+        vehicleType: formData.vehicleType,
+        plateNumber: formData.plateNumber,
+        orNumber: formData.orNumber,
+        crNumber: formData.crNumber,
+        driverName: formData.driverName || undefined,
+        driverLicense: formData.driverLicense || undefined,
+      };
+
+      const res = await fetch(`${API_BASE}/api/walkins/application`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to submit application');
+      }
+      await res.json();
+      setSuccessMessage('Application submitted successfully');
+      setToast({ message: 'Application submitted successfully', type: 'success' });
+      setShowToast(true);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setErrorMessage(msg);
+      setToast({ message: msg, type: 'error' });
+      setShowToast(true);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -43,61 +114,107 @@ export default function Registration() {
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
+        {showToast && (
+          <div className={`fixed top-6 right-6 z-50 min-w-[280px] max-w-sm rounded-md shadow-lg border ${toast.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+            <div className="flex items-start p-4">
+              <div className={`mr-3 mt-0.5 ${toast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                {toast.type === 'success' ? (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12A9 9 0 113 12a9 9 0 0118 0z"/></svg>
+                )}
+              </div>
+              <div className="flex-1 text-sm text-gray-800">{toast.message}</div>
+              <button onClick={() => setShowToast(false)} className="ml-3 text-gray-500 hover:text-gray-700">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Personal Information */}
+          {/* Toast replaces inline messages */}
+
+          {/* Applicant Information */}
           <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Applicant Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+                <label htmlFor="applicantFamilyName" className="block text-sm font-medium text-gray-700">Family Name</label>
                 <input
                   type="text"
-                  id="firstName"
-                  name="firstName"
-                  value={formData.firstName}
+                  id="applicantFamilyName"
+                  name="applicantFamilyName"
+                  value={formData.applicantFamilyName}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+                <label htmlFor="applicantGivenName" className="block text-sm font-medium text-gray-700">Given Name</label>
                 <input
                   type="text"
-                  id="lastName"
-                  name="lastName"
-                  value={formData.lastName}
+                  id="applicantGivenName"
+                  name="applicantGivenName"
+                  value={formData.applicantGivenName}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+                <label htmlFor="applicantMiddleName" className="block text-sm font-medium text-gray-700">Middle Name</label>
                 <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  value={formData.email}
+                  type="text"
+                  id="applicantMiddleName"
+                  name="applicantMiddleName"
+                  value={formData.applicantMiddleName}
                   onChange={handleChange}
-                  required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Phone Number</label>
+              <div className="md:col-span-3">
+                <label htmlFor="homeAddress" className="block text-sm font-medium text-gray-700">Home Address</label>
                 <input
-                  type="tel"
-                  id="phone"
-                  name="phone"
-                  value={formData.phone}
+                  type="text"
+                  id="homeAddress"
+                  name="homeAddress"
+                  value={formData.homeAddress}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">ID Number</label>
+              <div className="md:col-span-1">
+                <label htmlFor="schoolAffiliation" className="block text-sm font-medium text-gray-700">School's Affiliation</label>
+                <select
+                  id="schoolAffiliation"
+                  name="schoolAffiliation"
+                  value={formData.schoolAffiliation}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                >
+                  <option value="student">Student</option>
+                  <option value="personnel">Personnel</option>
+                  <option value="other">Others (Please Specify)</option>
+                </select>
+              </div>
+              {formData.schoolAffiliation === 'other' && (
+              <div className="md:col-span-2">
+                <label htmlFor="otherAffiliation" className="block text-sm font-medium text-gray-700">Others (Please Specify)</label>
+                <input
+                  type="text"
+                  id="otherAffiliation"
+                  name="otherAffiliation"
+                  value={formData.otherAffiliation}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              )}
+              <div className="md:col-span-1">
+                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">{formData.schoolAffiliation === 'student' ? 'Student No.' : (formData.schoolAffiliation === 'personnel' ? 'Employee No.' : 'ID Number')}</label>
                 <input
                   type="text"
                   id="idNumber"
@@ -108,22 +225,87 @@ export default function Registration() {
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
-              <div>
-                <label htmlFor="userType" className="block text-sm font-medium text-gray-700">User Type</label>
-                <select
-                  id="userType"
-                  name="userType"
-                  value={formData.userType}
+              <div className="md:col-span-1">
+                <label htmlFor="contactNumber" className="block text-sm font-medium text-gray-700">Contact Number</label>
+                <input
+                  type="tel"
+                  id="contactNumber"
+                  name="contactNumber"
+                  value={formData.contactNumber}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              {formData.schoolAffiliation === 'personnel' && (
+              <div className="md:col-span-1">
+                <label htmlFor="employmentStatus" className="block text-sm font-medium text-gray-700">Status of Employment</label>
+                <select
+                  id="employmentStatus"
+                  name="employmentStatus"
+                  value={formData.employmentStatus}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 >
-                  <option value="student">Student</option>
-                  <option value="faculty">Faculty</option>
-                  <option value="staff">Staff</option>
-                  <option value="visitor">Visitor</option>
+                  <option value="Permanent">Permanent</option>
+                  <option value="Temporary">Temporary</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Job Order">Job Order</option>
                 </select>
               </div>
+              )}
+              {formData.schoolAffiliation === 'other' && (
+                <>
+                  <div className="md:col-span-1">
+                    <label htmlFor="company" className="block text-sm font-medium text-gray-700">Other Applicant: Company</label>
+                    <input
+                      type="text"
+                      id="company"
+                      name="company"
+                      value={formData.company}
+                      onChange={handleChange}
+                      className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label htmlFor="purpose" className="block text-sm font-medium text-gray-700">Other Applicant: Purpose</label>
+                    <textarea
+                      id="purpose"
+                      name="purpose"
+                      value={formData.purpose}
+                      onChange={handleChange}
+                      rows={3}
+                      className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                    />
+                  </div>
+                </>
+              )}
+              {formData.schoolAffiliation === 'student' && (
+              <div className="md:col-span-1">
+                <label htmlFor="guardianName" className="block text-sm font-medium text-gray-700">Name of Parent/Guardian (for student applicant)</label>
+                <input
+                  type="text"
+                  id="guardianName"
+                  name="guardianName"
+                  value={formData.guardianName}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              )}
+              {formData.schoolAffiliation === 'student' && (
+              <div className="md:col-span-2">
+                <label htmlFor="guardianAddress" className="block text-sm font-medium text-gray-700">Parent's/Guardian Address</label>
+                <input
+                  type="text"
+                  id="guardianAddress"
+                  name="guardianAddress"
+                  value={formData.guardianAddress}
+                  onChange={handleChange}
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+              )}
             </div>
           </div>
 
@@ -132,7 +314,7 @@ export default function Registration() {
             <h2 className="text-lg font-medium text-gray-900 mb-4">Vehicle Information</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label htmlFor="vehicleType" className="block text-sm font-medium text-gray-700">Vehicle Type</label>
+                <label htmlFor="vehicleType" className="block text-sm font-medium text-gray-700">Type of Vehicle</label>
                 <select
                   id="vehicleType"
                   name="vehicleType"
@@ -141,9 +323,30 @@ export default function Registration() {
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 >
-                  <option value="car">Car</option>
-                  <option value="motorcycle">Motorcycle</option>
-                  <option value="other">Other</option>
+                  <option>Motorcycle</option>
+                  <option>Car</option>
+                  <option>SUV</option>
+                  <option>Tricycle</option>
+                  <option>Double/Single Cab</option>
+                  <option>Heavy Truck</option>
+                  <option>Heavy Equipment</option>
+                  <option>Bicycle</option>
+                  <option>E-Vehicle</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="vehicleUserType" className="block text-sm font-medium text-gray-700">Vehicle User ID</label>
+                <select
+                  id="vehicleUserType"
+                  name="vehicleUserType"
+                  value={formData.vehicleUserType}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                >
+                  <option value="owner">Vehicle Owner</option>
+                  <option value="driver">Vehicle Driver</option>
+                  <option value="passenger">Vehicle Passenger/User</option>
                 </select>
               </div>
               <div>
@@ -159,116 +362,55 @@ export default function Registration() {
                 />
               </div>
               <div>
-                <label htmlFor="brand" className="block text-sm font-medium text-gray-700">Brand</label>
+                <label htmlFor="orNumber" className="block text-sm font-medium text-gray-700">O.R. Number</label>
                 <input
                   type="text"
-                  id="brand"
-                  name="brand"
-                  value={formData.brand}
+                  id="orNumber"
+                  name="orNumber"
+                  value={formData.orNumber}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="model" className="block text-sm font-medium text-gray-700">Model</label>
+                <label htmlFor="crNumber" className="block text sm font-medium text-gray-700">C.R. Number</label>
                 <input
                   type="text"
-                  id="model"
-                  name="model"
-                  value={formData.model}
+                  id="crNumber"
+                  name="crNumber"
+                  value={formData.crNumber}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="color" className="block text-sm font-medium text-gray-700">Color</label>
+                <label htmlFor="driverName" className="block text-sm font-medium text-gray-700">Driver's Name</label>
                 <input
                   type="text"
-                  id="color"
-                  name="color"
-                  value={formData.color}
+                  id="driverName"
+                  name="driverName"
+                  value={formData.driverName}
                   onChange={handleChange}
-                  required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="year" className="block text-sm font-medium text-gray-700">Year</label>
+                <label htmlFor="driverLicense" className="block text-sm font-medium text-gray-700">Driver's License</label>
                 <input
                   type="text"
-                  id="year"
-                  name="year"
-                  value={formData.year}
+                  id="driverLicense"
+                  name="driverLicense"
+                  value={formData.driverLicense}
                   onChange={handleChange}
-                  required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
                 />
               </div>
             </div>
           </div>
 
-          {/* Pass Information */}
-          <div>
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Pass Information</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label htmlFor="purpose" className="block text-sm font-medium text-gray-700">Purpose</label>
-                <textarea
-                  id="purpose"
-                  name="purpose"
-                  value={formData.purpose}
-                  onChange={handleChange}
-                  required
-                  rows={3}
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="duration" className="block text-sm font-medium text-gray-700">Duration</label>
-                <select
-                  id="duration"
-                  name="duration"
-                  value={formData.duration}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                >
-                  <option value="temporary">Temporary</option>
-                  <option value="permanent">Permanent</option>
-                </select>
-              </div>
-              {formData.duration === 'temporary' && (
-                <>
-                  <div>
-                    <label htmlFor="startDate" className="block text-sm font-medium text-gray-700">Start Date</label>
-                    <input
-                      type="date"
-                      id="startDate"
-                      name="startDate"
-                      value={formData.startDate}
-                      onChange={handleChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">End Date</label>
-                    <input
-                      type="date"
-                      id="endDate"
-                      name="endDate"
-                      value={formData.endDate}
-                      onChange={handleChange}
-                      required
-                      className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          {/* Removed Required Documents and Pass Information as requested */}
 
           <div className="flex justify-end space-x-4">
             <button
@@ -279,9 +421,10 @@ export default function Registration() {
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-[#7E0303] text-white rounded-md hover:bg-[#5E0202] focus:outline-none"
+              disabled={isSubmitting}
+              className="px-4 py-2 bg-[#7E0303] text-white rounded-md hover:bg-[#5E0202] disabled:opacity-60 focus:outline-none"
             >
-              Register Vehicle
+              {isSubmitting ? 'Submitting...' : 'Register Vehicle'}
             </button>
           </div>
         </form>

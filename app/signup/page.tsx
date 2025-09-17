@@ -7,19 +7,64 @@ import Image from 'next/image';
 export default function SignUp() {
   const [formData, setFormData] = useState({
     firstName: '',
+    middleName: '',
     lastName: '',
     email: '',
-    password: '',
-    confirmPassword: '',
-    idNumber: '',
     phoneNumber: '',
-    userType: 'student' // default value
+    address: '',
+    affiliation: 'others',
+    password: '',
+    confirmPassword: ''
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log(formData);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (formData.password !== formData.confirmPassword) {
+      setErrorMessage('Passwords do not match');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          middleName: formData.middleName || undefined,
+          lastName: formData.lastName,
+          email: formData.email,
+          phoneNumber: formData.phoneNumber,
+          address: formData.address,
+          affiliation: formData.affiliation,
+          password: formData.password
+        })
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Registration failed');
+      }
+
+      const data = await res.json();
+      setSuccessMessage('Account created successfully. You can now sign in.');
+      // Optionally auto-login if API returns token
+      if (data && data.token) {
+        try { localStorage.setItem('token', data.token); } catch (_) {}
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -72,6 +117,17 @@ export default function SignUp() {
                   />
                 </div>
                 <div>
+                  <label htmlFor="middleName" className="block text-sm font-medium text-gray-700">Middle Name (optional)</label>
+                  <input
+                    type="text"
+                    id="middleName"
+                    name="middleName"
+                    value={formData.middleName}
+                    onChange={handleChange}
+                    className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  />
+                </div>
+                <div>
                   <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
                   <input
                     type="text"
@@ -99,33 +155,19 @@ export default function SignUp() {
               </div>
 
               <div>
-                <label htmlFor="userType" className="block text-sm font-medium text-gray-700">User Type</label>
+                <label htmlFor="affiliation" className="block text-sm font-medium text-gray-700">Affiliation</label>
                 <select
-                  id="userType"
-                  name="userType"
-                  value={formData.userType}
+                  id="affiliation"
+                  name="affiliation"
+                  value={formData.affiliation}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236B7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.5em_1.5em] bg-[right_1rem_center] bg-no-repeat pr-10"
                 >
-                  <option value="student">Student</option>
-                  <option value="faculty">Faculty</option>
-                  <option value="staff">Staff</option>
-                  <option value="visitor">Visitor</option>
+                  <option value="student">student</option>
+                  <option value="personnel">personnel</option>
+                  <option value="others">others</option>
                 </select>
-              </div>
-
-              <div>
-                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">ID Number</label>
-                <input
-                  type="text"
-                  id="idNumber"
-                  name="idNumber"
-                  value={formData.idNumber}
-                  onChange={handleChange}
-                  required
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
               </div>
 
               <div>
@@ -135,6 +177,19 @@ export default function SignUp() {
                   id="phoneNumber"
                   name="phoneNumber"
                   value={formData.phoneNumber}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700">Address</label>
+                <input
+                  type="text"
+                  id="address"
+                  name="address"
+                  value={formData.address}
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
@@ -171,6 +226,12 @@ export default function SignUp() {
               </div>
             </div>
 
+            {(errorMessage || successMessage) && (
+              <div className={`text-sm ${errorMessage ? 'text-red-600' : 'text-green-600'}`}>
+                {errorMessage || successMessage}
+              </div>
+            )}
+
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <input
@@ -189,9 +250,10 @@ export default function SignUp() {
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#7E0303] hover:bg-[#5E0202] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7E0303]"
+                disabled={isSubmitting}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#7E0303] hover:bg-[#5E0202] disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#7E0303]"
               >
-                Create Account
+                {isSubmitting ? 'Creating...' : 'Create Account'}
               </button>
             </div>
 

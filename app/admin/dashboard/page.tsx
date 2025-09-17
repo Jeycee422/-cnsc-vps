@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -27,7 +27,55 @@ ChartJS.register(
   Legend
 );
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
 export default function Dashboard() {
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [stats, setStats] = useState<{
+    users: { total: number };
+    vehicles: { total: number; pending: number; approved: number; rejected: number; registered: number };
+    scans: { total: number; successful: number; denied: number };
+  } | null>(null);
+  const [recentScans, setRecentScans] = useState<any[]>([]);
+  const [recentUsers, setRecentUsers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const ac = new AbortController();
+    const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
+    const load = async () => {
+      setIsLoading(true);
+      setErrorMessage('');
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/dashboard`, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          signal: ac.signal
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Failed to load dashboard');
+        }
+        const data = await res.json();
+        setStats(data.statistics);
+        setRecentScans(data.recentActivity?.scans || []);
+        setRecentUsers(data.recentActivity?.users || []);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        setErrorMessage(msg);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (token) load(); else {
+      setIsLoading(false);
+      setErrorMessage('Not authenticated');
+    }
+    return () => ac.abort();
+  }, []);
+
   // Mock data for charts
   const monthlyData = {
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
@@ -57,12 +105,18 @@ export default function Dashboard() {
   };
 
   const statusData = {
-    labels: ['Pending', 'Approved', 'Rejected'],
+    labels: ['Pending', 'Approved', 'Registered', 'Rejected'],
     datasets: [
       {
-        data: [24, 156, 12],
+        data: [
+          stats?.vehicles.pending ?? 0,
+          stats?.vehicles.approved ?? 0,
+          stats?.vehicles.registered ?? 0,
+          stats?.vehicles.rejected ?? 0,
+        ],
         backgroundColor: [
           '#FCD34D',
+          '#3B82F6',
           '#34D399',
           '#F87171',
         ],
@@ -85,6 +139,24 @@ export default function Dashboard() {
     ],
   };
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <div>Loading...</div>
+      </div>
+    );
+  }
+
+  if (errorMessage) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
+        <div className="text-red-600">{errorMessage}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
@@ -100,7 +172,7 @@ export default function Dashboard() {
             </div>
             <div className="ml-4">
               <h2 className="text-sm font-medium text-gray-600">Pending Applications</h2>
-              <p className="text-2xl font-semibold text-gray-900">24</p>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.vehicles.pending ?? 0}</p>
               <p className="text-xs text-gray-500 mt-1">Awaiting review</p>
             </div>
           </div>
@@ -114,9 +186,24 @@ export default function Dashboard() {
               </svg>
             </div>
             <div className="ml-4">
+              <h2 className="text-sm font-medium text-gray-600">Approved Applications</h2>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.vehicles.approved ?? 0}</p>
+              <p className="text-xs text-gray-500 mt-1">Awaiting RFID assignment</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center">
+            <div className="p-3 rounded-full bg-[#7E0303] bg-opacity-10">
+              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+              </svg>
+            </div>
+            <div className="ml-4">
               <h2 className="text-sm font-medium text-gray-600">Active Vehicle Passes</h2>
-              <p className="text-2xl font-semibold text-gray-900">156</p>
-              <p className="text-xs text-gray-500 mt-1">Currently registered</p>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.vehicles.registered ?? 0}</p>
+              <p className="text-xs text-gray-500 mt-1">With RFID assigned</p>
             </div>
           </div>
         </div>
@@ -129,33 +216,19 @@ export default function Dashboard() {
               </svg>
             </div>
             <div className="ml-4">
-              <h2 className="text-sm font-medium text-gray-600">Today's Registrations</h2>
-              <p className="text-2xl font-semibold text-gray-900">12</p>
-              <p className="text-xs text-gray-500 mt-1">New applications</p>
+              <h2 className="text-sm font-medium text-gray-600">Total Users</h2>
+              <p className="text-2xl font-semibold text-gray-900">{stats?.users.total ?? 0}</p>
+              <p className="text-xs text-gray-500 mt-1">Registered accounts</p>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-[#7E0303] bg-opacity-10">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div className="ml-4">
-              <h2 className="text-sm font-medium text-gray-600">Expiring Soon</h2>
-              <p className="text-2xl font-semibold text-gray-900">8</p>
-              <p className="text-xs text-gray-500 mt-1">Next 7 days</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Additional Stats */}
       <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
         <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Application Status</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Application & Registration Status</h2>
           <div className="h-80">
             <Doughnut
               data={statusData}
@@ -253,53 +326,21 @@ export default function Dashboard() {
           <h2 className="text-lg font-medium text-gray-900">Recent Activities</h2>
         </div>
         <div className="divide-y divide-gray-200">
-          {[
-            {
-              type: 'New Application',
-              user: 'John Doe',
-              id: '2023-1234',
-              time: '2 hours ago',
-              icon: (
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              )
-            },
-            {
-              type: 'Pass Approved',
-              user: 'Jane Smith',
-              id: '2023-1235',
-              time: '3 hours ago',
-              icon: (
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              )
-            },
-            {
-              type: 'New Registration',
-              user: 'Mike Johnson',
-              id: '2023-1236',
-              time: '4 hours ago',
-              icon: (
-                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                </svg>
-              )
-            }
-          ].map((activity, index) => (
+          {recentScans.map((scan, index) => (
             <div key={index} className="px-6 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
                   <div className="p-2 rounded-full bg-[#7E0303] bg-opacity-10">
-                    {activity.icon}
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{activity.type}</p>
-                    <p className="text-sm text-gray-500">{activity.user} - ID: {activity.id}</p>
+                    <p className="text-sm font-medium text-gray-900">{scan.scanResult === 'success' ? 'Scan Success' : scan.scanResult === 'denied' ? 'Scan Denied' : 'Scan'}</p>
+                    <p className="text-sm text-gray-500">{scan.user?.firstName} {scan.user?.lastName} - Plate: {scan.vehicle?.plateNumber || 'N/A'}</p>
                   </div>
                 </div>
-                <span className="text-sm text-gray-500">{activity.time}</span>
+                <span className="text-sm text-gray-500">{new Date(scan.scanTimestamp).toLocaleString()}</span>
               </div>
             </div>
           ))}

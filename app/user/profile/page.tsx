@@ -14,6 +14,8 @@ interface User {
 
 export default function Profile() {
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [errorMessage, setErrorMessage] = useState<string>('');
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -24,29 +26,85 @@ export default function Profile() {
   });
 
   useEffect(() => {
-    // Set dummy data directly
-    const dummyUser: User = {
-      id: '1',
-      firstName: 'John',
-      lastName: 'Doe',
-      email: 'john@email.com',
-      phone: '09123456789',
-      idNumber: '2024-0001',
-      userType: 'student'
+    const getAuthToken = (): string | null => {
+      if (typeof window === 'undefined') return null;
+      try {
+        const fromLocalStorage = window.localStorage.getItem('token');
+        if (fromLocalStorage) return fromLocalStorage;
+      } catch (_) {
+        // ignore
+      }
+      try {
+        const cookies = document.cookie.split(';').map(c => c.trim());
+        const tokenCookie = cookies.find(c => c.startsWith('token='));
+        if (tokenCookie) return decodeURIComponent(tokenCookie.split('=')[1]);
+      } catch (_) {
+        // ignore
+      }
+      return null;
     };
 
-    setUser(dummyUser);
-    setFormData({
-      firstName: dummyUser.firstName,
-      lastName: dummyUser.lastName,
-      email: dummyUser.email,
-      phone: dummyUser.phone,
-      idNumber: dummyUser.idNumber,
-      userType: dummyUser.userType,
-    });
+    const abortController = new AbortController();
+    const fetchProfile = async () => {
+      setIsLoading(true);
+      setErrorMessage('');
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          setErrorMessage('You are not authenticated.');
+          setIsLoading(false);
+          return;
+        }
 
-    // Store dummy data in localStorage
-    localStorage.setItem('user', JSON.stringify(dummyUser));
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        const res = await fetch(`${baseUrl}/api/auth/me`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          signal: abortController.signal,
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(text || 'Failed to load profile');
+        }
+
+        const data = await res.json();
+        // Handle the response structure: { user: { id, firstName, lastName, email, role, ... } }
+        const userData = data.user || data;
+        // Normalize fields from API to our User shape
+        const normalized: User = {
+          id: userData.id || userData._id || userData.userId || '',
+          firstName: userData.firstName || '',
+          lastName: userData.lastName || '',
+          email: userData.email || '',
+          phone: userData.phoneNumber || userData.phone || '',
+          idNumber: userData.idNumber || userData.studentId || '',
+          userType: userData.role || userData.userType || '',
+        };
+
+        setUser(normalized);
+        setFormData({
+          firstName: normalized.firstName,
+          lastName: normalized.lastName,
+          email: normalized.email,
+          phone: normalized.phone,
+          idNumber: normalized.idNumber,
+          userType: normalized.userType,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setErrorMessage(message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchProfile();
+
+    return () => abortController.abort();
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -57,23 +115,64 @@ export default function Profile() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
-    
-    // Update localStorage with new user data
-    const updatedUser: User = {
-      id: user.id,
-      ...formData
-    };
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-    setUser(updatedUser);
-    console.log('Profile updated:', updatedUser);
+
+    const token = (typeof window !== 'undefined')
+      ? (window.localStorage.getItem('token') || '')
+      : '';
+    if (!token) {
+      setErrorMessage('You are not authenticated.');
+      return;
+    }
+
+    try {
+      setErrorMessage('');
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${baseUrl}/api/auth/me`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          phoneNumber: formData.phone,
+          idNumber: formData.idNumber,
+          role: formData.userType,
+        })
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to update profile');
+      }
+
+      const data = await res.json();
+      // Handle the response structure: { user: { id, firstName, lastName, email, role, ... } }
+      const userData = data.user || data;
+      const updatedUser: User = {
+        id: userData.id || userData._id || user.id,
+        firstName: userData.firstName ?? formData.firstName,
+        lastName: userData.lastName ?? formData.lastName,
+        email: userData.email ?? formData.email,
+        phone: userData.phoneNumber ?? userData.phone ?? formData.phone,
+        idNumber: userData.idNumber ?? formData.idNumber,
+        userType: userData.role ?? userData.userType ?? formData.userType,
+      };
+      setUser(updatedUser);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setErrorMessage(message);
+    }
   };
 
-  if (!user) {
-    return null;
-  }
+  if (isLoading) return <div className="space-y-6"><h1 className="text-2xl font-semibold text-gray-900">Profile</h1><div>Loading...</div></div>;
+  if (errorMessage) return <div className="space-y-6"><h1 className="text-2xl font-semibold text-gray-900">Profile</h1><div className="text-red-600">{errorMessage}</div></div>;
+  if (!user) return null;
 
   return (
     <div className="space-y-6">
