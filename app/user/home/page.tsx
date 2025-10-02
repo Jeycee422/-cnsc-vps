@@ -55,6 +55,11 @@ export default function Home() {
           router.push('/admin/dashboard');
           return;
         }
+        // Redirect security guards to security interface
+        if (composedUser.role === 'security_guard') {
+          router.push('/security/scans');
+          return;
+        }
       } catch (err) {
         if (err && typeof err === 'object' && (err as any).name === 'AbortError') {
           return;

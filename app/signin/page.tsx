@@ -44,8 +44,32 @@ export default function SignIn() {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'Invalid credentials');
+        let friendly = '';
+        try {
+          const data = await res.json();
+          const apiMessage = (data && (data.error || data.message)) ? String(data.error || data.message) : '';
+          if (res.status === 401 || res.status === 400) {
+            friendly = 'Invalid email or password.';
+          } else if (res.status === 429) {
+            friendly = 'Too many login attempts. Please try again later.';
+          } else if (res.status >= 500) {
+            friendly = 'Server error. Please try again later.';
+          } else {
+            friendly = apiMessage || 'Login failed. Please check your credentials.';
+          }
+        } catch {
+          const text = await res.text().catch(() => '');
+          if (res.status === 401 || res.status === 400) {
+            friendly = 'Invalid email or password.';
+          } else if (res.status === 429) {
+            friendly = 'Too many login attempts. Please try again later.';
+          } else if (res.status >= 500) {
+            friendly = 'Server error. Please try again later.';
+          } else {
+            friendly = text || 'Login failed. Please try again.';
+          }
+        }
+        throw new Error(friendly);
       }
 
       const data = await res.json();
@@ -57,11 +81,15 @@ export default function SignIn() {
       const role = data?.user?.role || 'user';
       if (role === 'admin' || role === 'super_admin') {
         router.push('/admin/dashboard');
+      } else if (role === 'security_guard') {
+        router.push('/security/scans');
       } else {
         router.push('/user/home');
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed';
+      // Network or parsing errors
+      let message = 'Login failed. Please try again.';
+      if (err instanceof Error) message = err.message || message;
       setError(message);
     } finally {
       setIsSubmitting(false);

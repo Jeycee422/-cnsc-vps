@@ -15,11 +15,13 @@ export default function Applications() {
   const [selectedApplication, setSelectedApplication] = useState<any>(null);
   const [rfidValue, setRfidValue] = useState<string>('');
   const [isAssigningRfid, setIsAssigningRfid] = useState<boolean>(false);
+  const [isReassignMode, setIsReassignMode] = useState<boolean>(false);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null);
   const [confirmApplicationId, setConfirmApplicationId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [assignAlert, setAssignAlert] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const token = useMemo(() => (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '', []);
 
@@ -175,6 +177,7 @@ export default function Applications() {
   const openViewModal = (application: any) => {
     setSelectedApplication(application);
     setRfidValue(application.rfidInfo?.tagId || '');
+    setIsReassignMode(false);
     setShowViewModal(true);
   };
 
@@ -182,6 +185,8 @@ export default function Applications() {
     setShowViewModal(false);
     setSelectedApplication(null);
     setRfidValue('');
+    setIsReassignMode(false);
+    setAssignAlert(null);
   };
 
   const openConfirmModal = (action: 'approve' | 'reject', applicationId: string) => {
@@ -209,6 +214,8 @@ export default function Applications() {
     
     setIsAssigningRfid(true);
     try {
+      // Debug: log request payload
+      try { console.log('[RFID] Assign request', { applicationId: selectedApplication._id, tagId: rfidValue.trim() }); } catch {}
       const res = await fetch(`${API_BASE}/api/rfid/assign`, {
         method: 'POST',
         headers: {
@@ -223,17 +230,41 @@ export default function Applications() {
       });
       
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ error: 'Failed to assign RFID' }));
-        throw new Error(errorData.error || errorData.message || 'Failed to assign RFID');
+        // Build a friendly message from API response and status
+        let friendly = '';
+        try {
+          const errorData = await res.json();
+          const apiMessage = (errorData && (errorData.error || errorData.message)) ? String(errorData.error || errorData.message) : '';
+          if (res.status === 400) friendly = apiMessage || 'Invalid RFID details. Please check and try again.';
+          else if (res.status === 401 || res.status === 403) friendly = 'You are not authorized to assign RFID.';
+          else if (res.status === 404) friendly = 'Application not found or no longer available.';
+          else if (res.status === 409) friendly = apiMessage || 'This RFID tag is already assigned to another application.';
+          else if (res.status === 429) friendly = 'Too many attempts. Please wait a moment and try again.';
+          else if (res.status >= 500) friendly = 'Server error while assigning RFID. Please try again later.';
+          else friendly = apiMessage || 'Failed to assign RFID. Please try again.';
+        } catch {
+          const text = await res.text().catch(() => '');
+          if (res.status === 400) friendly = 'Invalid RFID details. Please check and try again.';
+          else if (res.status === 401 || res.status === 403) friendly = 'You are not authorized to assign RFID.';
+          else if (res.status === 404) friendly = 'Application not found or no longer available.';
+          else if (res.status === 409) friendly = 'This RFID tag is already assigned to another application.';
+          else if (res.status === 429) friendly = 'Too many attempts. Please wait a moment and try again.';
+          else if (res.status >= 500) friendly = 'Server error while assigning RFID. Please try again later.';
+          else friendly = text || 'Failed to assign RFID. Please try again.';
+        }
+        setAssignAlert({ type: 'error', text: friendly });
+        return;
       }
       
       const data = await res.json();
+      // Debug: log success response
+      try { console.log('[RFID] Assign response', data); } catch {}
       
       // Calculate expiry date (1 year from now)
       const expiryDate = new Date();
       expiryDate.setFullYear(expiryDate.getFullYear() + 1);
       
-      // Update the application with the new RFID info and expiry date
+      // Update the application with the new RFID info and expiry date (mirror server status)
       setApplications(prev => prev.map(a => 
         a._id === selectedApplication._id 
           ? { 
@@ -243,12 +274,12 @@ export default function Applications() {
                 validUntil: expiryDate.toISOString()
               },
               expiryDate: expiryDate.toISOString(),
-              status: 'completed' // Update status to completed after RFID assignment
+              status: data?.application?.status || a.status
             }
           : a
       ));
       
-      // Update the selected application for the modal
+      // Update the selected application for the modal (mirror server status)
       setSelectedApplication((current: any) => current ? {
         ...current,
         rfidInfo: {
@@ -256,14 +287,21 @@ export default function Applications() {
           validUntil: expiryDate.toISOString()
         },
         expiryDate: expiryDate.toISOString(),
-        status: 'completed'
+        status: data?.application?.status || current.status
       } : null);
       
+      setAssignAlert({ type: 'success', text: isReassignMode ? 'RFID reassigned successfully.' : 'RFID assigned successfully.' });
+      // Sync list with backend state in case sockets are missed or server keeps a different status label
+      try {
+        const ac = new AbortController();
+        fetchApplications(ac.signal);
+        setTimeout(() => ac.abort(), 15000);
+      } catch {}
       closeViewModal();
     } catch (err) {
       console.error('Error assigning RFID:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to assign RFID. Please try again.';
-      alert(errorMessage);
+      setAssignAlert({ type: 'error', text: errorMessage });
     } finally {
       setIsAssigningRfid(false);
     }
@@ -376,7 +414,15 @@ export default function Applications() {
   if (isLoading) return <div className="space-y-6"><h1 className="text-2xl font-semibold text-gray-900">{userRole === 'super_admin' ? 'Approved & Completed Applications' : 'Applications'}</h1><div>Loading...</div></div>;
   if (errorMessage) return <div className="space-y-6"><h1 className="text-2xl font-semibold text-gray-900">{userRole === 'super_admin' ? 'Approved & Completed Applications' : 'Applications'}</h1><div className="text-red-600">{errorMessage}</div></div>;
   return (
-    <div className="space-y-6">
+    <>
+      <style jsx global>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-break { page-break-before: always; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+      `}</style>
+      <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-900">{userRole === 'super_admin' ? 'Approved & Completed Applications' : 'Applications'}</h1>
         {userRole !== 'super_admin' && (
@@ -543,6 +589,26 @@ export default function Applications() {
                 </button>
               </div>
 
+              {assignAlert && (
+                <div className={`mb-4 p-4 rounded-md border ${assignAlert.type === 'success' ? 'bg-green-50 border-green-300 text-green-800' : 'bg-red-50 border-red-300 text-red-800'}`}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start space-x-2">
+                      <svg className={`w-5 h-5 mt-0.5 ${assignAlert.type === 'success' ? 'text-green-600' : 'text-red-600'}`} fill="currentColor" viewBox="0 0 20 20">
+                        {assignAlert.type === 'success' ? (
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414L9 13.414l4.707-4.707z" clipRule="evenodd" />
+                        ) : (
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        )}
+                      </svg>
+                      <p className="text-sm">{assignAlert.text}</p>
+                    </div>
+                    <button onClick={() => setAssignAlert(null)} className="text-gray-500 hover:text-gray-700">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 {/* Applicant Information */}
                 <div className="bg-gray-50 p-4 rounded-lg">
@@ -609,10 +675,10 @@ export default function Applications() {
                 </div>
               </div>
 
-              {/* RFID Assignment Section (for super_admin on approved applications) */}
-              {userRole === 'super_admin' && selectedApplication.status === 'approved' && (
+              {/* RFID Assignment / Reassignment Section */}
+              {userRole === 'super_admin' && (selectedApplication.status === 'approved' || isReassignMode) && (
                 <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                  <h4 className="font-medium text-gray-900 mb-3">RFID Assignment</h4>
+                  <h4 className="font-medium text-gray-900 mb-3">{isReassignMode ? 'Reassign RFID' : 'RFID Assignment'}</h4>
                   <div className="space-y-4">
                     <div>
                       <label htmlFor="rfidValue" className="block text-sm font-medium text-gray-700 mb-2">
@@ -633,7 +699,7 @@ export default function Applications() {
                         disabled={!rfidValue.trim() || isAssigningRfid}
                         className="px-4 py-2 text-sm font-medium text-white bg-[#7E0303] rounded-md hover:bg-[#5E0202] focus:outline-none focus:ring-2 focus:ring-[#7E0303] disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isAssigningRfid ? 'Assigning...' : 'Assign RFID & Register'}
+                        {isAssigningRfid ? (isReassignMode ? 'Reassigning...' : 'Assigning...') : (isReassignMode ? 'Reassign RFID' : 'Assign RFID & Register')}
                       </button>
                     </div>
                   </div>
@@ -757,11 +823,30 @@ export default function Applications() {
                       </p>
                     )}
                   </div>
+                  {userRole === 'super_admin' && (
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setIsReassignMode(true);
+                          setRfidValue(selectedApplication.rfidInfo?.tagId || '');
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      >
+                        Reassign RFID
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Close Button */}
-              <div className="flex justify-end">
+              {/* Action Buttons */}
+              <div className="flex justify-between">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#7E0303] rounded-md hover:bg-[#5E0202] focus:outline-none focus:ring-2 focus:ring-[#7E0303]"
+                >
+                  Print Application
+                </button>
                 <button
                   onClick={closeViewModal}
                   className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
@@ -841,5 +926,6 @@ export default function Applications() {
         </div>
       )}
     </div>
+    </>
   );
 } 

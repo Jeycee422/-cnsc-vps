@@ -33,6 +33,8 @@ export default function Registration() {
     driverName: '',
     driverLicense: ''
   });
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -42,8 +44,61 @@ export default function Registration() {
   const [showToast, setShowToast] = useState(false);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Prefill from authenticated user profile
+  // Check for edit mode and load application data
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isEdit = urlParams.get('edit') === 'true';
+    
+    if (isEdit) {
+      setIsEditMode(true);
+      try {
+        const editingData = localStorage.getItem('editingApplication');
+        if (editingData) {
+          const application = JSON.parse(editingData);
+          setEditingApplicationId(application.id || application._id);
+          
+          // Populate form with existing application data
+          setFormData(prev => ({
+            ...prev,
+            applicantFamilyName: application.applicant?.familyName || prev.applicantFamilyName,
+            applicantGivenName: application.applicant?.givenName || prev.applicantGivenName,
+            applicantMiddleName: application.applicant?.middleName || prev.applicantMiddleName,
+            homeAddress: application.applicant?.homeAddress || prev.homeAddress,
+            schoolAffiliation: application.applicant?.schoolAffiliation || prev.schoolAffiliation,
+            otherAffiliation: application.applicant?.otherAffiliation || prev.otherAffiliation,
+            idNumber: application.applicant?.idNumber || prev.idNumber,
+            contactNumber: application.applicant?.contactNumber || prev.contactNumber,
+            employmentStatus: application.applicant?.employmentStatus || prev.employmentStatus,
+            company: application.applicant?.company || prev.company,
+            purpose: application.applicant?.purpose || prev.purpose,
+            guardianName: application.applicant?.guardianName || prev.guardianName,
+            guardianAddress: application.applicant?.guardianAddress || prev.guardianAddress,
+            vehicleUserType: application.vehicleUserType || prev.vehicleUserType,
+            vehicleType: application.vehicleInfo?.type || application.vehicleDetails?.type || prev.vehicleType,
+            plateNumber: application.vehicleInfo?.plateNumber || application.vehicleDetails?.plateNumber || prev.plateNumber,
+            orNumber: application.vehicleInfo?.orNumber || prev.orNumber,
+            crNumber: application.vehicleInfo?.crNumber || prev.crNumber,
+            driverName: application.driverName || prev.driverName,
+            driverLicense: application.driverLicense || prev.driverLicense,
+          }));
+          
+          // Lock affiliation if it was previously set
+          if (application.applicant?.schoolAffiliation === 'student' || application.applicant?.schoolAffiliation === 'personnel') {
+            setIsAffiliationLocked(true);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load application for editing:', error);
+        setToast({ message: 'Failed to load application for editing', type: 'error' });
+        setShowToast(true);
+      }
+    }
+  }, []);
+
+  // Prefill from authenticated user profile (only if not in edit mode)
+  useEffect(() => {
+    if (isEditMode) return; // Skip user prefill if editing
+    
     const ac = new AbortController();
     const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
     if (!token) return;
@@ -81,7 +136,7 @@ export default function Registration() {
     };
     load();
     return () => ac.abort();
-  }, []);
+  }, [isEditMode]);
 
   useEffect(() => {
     if (showToast) {
@@ -131,6 +186,67 @@ export default function Registration() {
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
+  const getUserFriendlyErrorMessage = (errorMessage: string): string => {
+    const lowerMessage = errorMessage.toLowerCase();
+    
+    // Document-related errors
+    if (lowerMessage.includes('no files') || lowerMessage.includes('missing files')) {
+      return 'Please upload all required documents (OR/CR and Driver\'s License)';
+    }
+    if (lowerMessage.includes('file') && lowerMessage.includes('required')) {
+      return 'Please upload all required documents';
+    }
+    if (lowerMessage.includes('file size') || lowerMessage.includes('too large')) {
+      return 'File size is too large. Please upload files smaller than 5MB';
+    }
+    if (lowerMessage.includes('file type') || lowerMessage.includes('invalid format')) {
+      return 'Invalid file format. Please upload PNG, JPG, or PDF files only';
+    }
+    
+    // Form validation errors
+    if (lowerMessage.includes('required') && lowerMessage.includes('field')) {
+      return 'Please fill in all required fields';
+    }
+    if (lowerMessage.includes('email') && lowerMessage.includes('invalid')) {
+      return 'Please enter a valid email address';
+    }
+    if (lowerMessage.includes('phone') && lowerMessage.includes('invalid')) {
+      return 'Please enter a valid phone number';
+    }
+    if (lowerMessage.includes('plate number') && lowerMessage.includes('invalid')) {
+      return 'Please enter a valid plate number';
+    }
+    
+    // Authentication errors
+    if (lowerMessage.includes('not authenticated') || lowerMessage.includes('unauthorized')) {
+      return 'Your session has expired. Please sign in again';
+    }
+    if (lowerMessage.includes('token') && lowerMessage.includes('invalid')) {
+      return 'Your session has expired. Please sign in again';
+    }
+    
+    // Server errors
+    if (lowerMessage.includes('server error') || lowerMessage.includes('internal error')) {
+      return 'Something went wrong on our end. Please try again later';
+    }
+    if (lowerMessage.includes('network') || lowerMessage.includes('connection')) {
+      return 'Network connection error. Please check your internet connection and try again';
+    }
+    
+    // Duplicate application
+    if (lowerMessage.includes('already exists') || lowerMessage.includes('duplicate')) {
+      return 'You have already submitted an application for this vehicle';
+    }
+    
+    // Generic fallback
+    if (lowerMessage.includes('failed to submit') || lowerMessage.includes('submission failed')) {
+      return 'Failed to submit application. Please check all fields and try again';
+    }
+    
+    // If no specific pattern matches, return a generic friendly message
+    return 'Something went wrong. Please check your information and try again';
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (name === 'schoolAffiliation' && isAffiliationLocked) {
@@ -146,6 +262,22 @@ export default function Registration() {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
+
+    // Validate required documents
+    const orcrDocuments = documents.filter(doc => doc.type === 'orCrCopy');
+    const licenseDocuments = documents.filter(doc => doc.type === 'driversLicenseCopy');
+    
+    if (orcrDocuments.length === 0) {
+      setToast({ message: 'Please upload your OR/CR document', type: 'error' });
+      setShowToast(true);
+      return;
+    }
+    
+    if (licenseDocuments.length === 0) {
+      setToast({ message: 'Please upload your driver\'s license', type: 'error' });
+      setShowToast(true);
+      return;
+    }
 
     try {
       setIsSubmitting(true);
@@ -181,23 +313,50 @@ export default function Registration() {
         body.append(doc.type, doc.file, doc.name);
       });
 
-      const res = await fetch(`${API_BASE}/api/vehicle-passes/application`, {
-        method: 'POST',
+      const url = isEditMode && editingApplicationId 
+        ? `${API_BASE}/api/vehicle-passes/application/${editingApplicationId}`
+        : `${API_BASE}/api/vehicle-passes/application`;
+      
+      const res = await fetch(url, {
+        method: isEditMode ? 'PUT' : 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body
       });
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'Failed to submit application');
+        let errorMessage = 'Failed to submit application';
+        try {
+          const errorData = await res.json();
+          errorMessage = errorData.message || errorData.error || errorData.details || 'Failed to submit application';
+        } catch {
+          try {
+            const text = await res.text();
+            errorMessage = text || 'Failed to submit application';
+          } catch {
+            errorMessage = 'Failed to submit application';
+          }
+        }
+        throw new Error(errorMessage);
       }
       await res.json();
-      setSuccessMessage('Application submitted successfully');
-      setToast({ message: 'Application submitted successfully', type: 'success' });
+      const successMessage = isEditMode ? 'Application updated successfully' : 'Application submitted successfully';
+      setSuccessMessage(successMessage);
+      setToast({ message: successMessage, type: 'success' });
       setShowToast(true);
+      
+      // Clear edit mode after successful update
+      if (isEditMode) {
+        localStorage.removeItem('editingApplication');
+      }
+      
+      // Redirect to vehicle pass page after successful submission/update
+      setTimeout(() => {
+        window.location.href = '/user/pass';
+      }, 2000);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setErrorMessage(message);
-      setToast({ message, type: 'error' });
+      const rawMessage = err instanceof Error ? err.message : 'Unknown error';
+      const friendlyMessage = getUserFriendlyErrorMessage(rawMessage);
+      setErrorMessage(friendlyMessage);
+      setToast({ message: friendlyMessage, type: 'error' });
       setShowToast(true);
     } finally {
       setIsSubmitting(false);
@@ -207,7 +366,14 @@ export default function Registration() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Online Registration</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">
+          {isEditMode ? 'Edit Application' : 'Online Registration'}
+        </h1>
+        {isEditMode && (
+          <div className="text-sm text-gray-600">
+            Editing rejected application
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
@@ -661,9 +827,24 @@ export default function Registration() {
           <div className="flex justify-end">
             <button
               type="submit"
-              className="px-6 py-3 bg-[#7E0303] text-white rounded-md hover:bg-[#5E0202] transition-colors"
+              disabled={isSubmitting}
+              className={`px-6 py-3 text-white rounded-md transition-colors ${
+                isSubmitting 
+                  ? 'bg-gray-400 cursor-not-allowed' 
+                  : 'bg-[#7E0303] hover:bg-[#5E0202]'
+              }`}
             >
-              Submit Registration
+              {isSubmitting ? (
+                <div className="flex items-center space-x-2">
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span>{isEditMode ? 'Updating...' : 'Submitting...'}</span>
+                </div>
+              ) : (
+                isEditMode ? 'Update Application' : 'Submit Registration'
+              )}
             </button>
           </div>
         </form>
