@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // Backend base URL
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -30,6 +30,19 @@ export default function SignIn() {
   //     }
   //   }
   // }, [router]);
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const emailFromUrl = searchParams.get('email');
+    
+    if (emailFromUrl) {
+      setFormData(prev => ({
+        ...prev,
+        email: decodeURIComponent(emailFromUrl)
+      }));
+    }
+    
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

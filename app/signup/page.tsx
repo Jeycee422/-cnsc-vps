@@ -44,10 +44,16 @@ export default function SignUp() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    console.log('🔔 FORM SUBMITTED'); // Debug 1
     setErrorMessage('');
     setSuccessMessage('');
     setToast(null);
-
+    if (formData.password !== formData.confirmPassword) {
+      console.log('🔔 PASSWORDS DONT MATCH - CALLING showToast'); // Debug log
+      showToast('error', 'Passwords do not match');
+      return;
+    }
     // Validate password strength
     const passwordError = validatePassword(formData.password);
     if (passwordError) {
@@ -55,10 +61,7 @@ export default function SignUp() {
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      showToast('error', 'Passwords do not match');
-      return;
-    }
+    
 
     try {
       setIsSubmitting(true);
@@ -175,7 +178,7 @@ export default function SignUp() {
     <main className="min-h-screen bg-gray-50">
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm">
+        <div className="fixed top-4 right-4 z-[1000] max-w-sm">
           <div className={`p-4 rounded-lg shadow-lg ${
             toast.type === 'success' 
               ? 'bg-green-50 border border-green-200 text-green-800' 
@@ -214,7 +217,7 @@ export default function SignUp() {
       {/* Success Dialog */}
       {showSuccessDialog && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+          <div className="relative top-60 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
             <div className="mt-3 text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
                 <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -228,13 +231,17 @@ export default function SignUp() {
               <div className="flex space-x-3 justify-center">
                 <button
                   onClick={() => setShowSuccessDialog(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 cursor-pointer"
                 >
                   Stay Here
                 </button>
                 <button
-                  onClick={() => window.location.href = '/signin'}
-                  className="px-4 py-2 text-sm font-medium text-white bg-[#7E0303] rounded-md hover:bg-[#5E0202] focus:outline-none focus:ring-2 focus:ring-[#7E0303]"
+                
+                  onClick={() => {
+                    const emailParam = encodeURIComponent(formData.email);
+                    window.location.href = `/signin?email=${emailParam}`;
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-[#7E0303] rounded-md hover:bg-[#5E0202] focus:outline-none focus:ring-2 focus:ring-[#7E0303] cursor-pointer"
                 >
                   Sign In Now
                 </button>
@@ -330,9 +337,9 @@ export default function SignUp() {
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20fill%3D%22none%22%20viewBox%3D%220%200%2020%2020%22%3E%3Cpath%20stroke%3D%22%236B7280%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%20stroke-width%3D%221.5%22%20d%3D%22m6%208%204%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-[length:1.5em_1.5em] bg-[right_1rem_center] bg-no-repeat pr-10"
                 >
-                  <option value="student">student</option>
-                  <option value="personnel">personnel</option>
-                  <option value="others">others</option>
+                  <option value="student">Student</option>
+                  <option value="personnel">Personnel</option>
+                  <option value="others">Others</option>
                 </select>
               </div>
 

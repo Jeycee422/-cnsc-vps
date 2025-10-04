@@ -41,7 +41,7 @@ export default function Home() {
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
-        <div className="text-center mb-16">
+        <div className="text-center mb-16 mt-16">
           <h2 className="text-4xl font-bold text-[#7E0303] mb-6">
             Welcome to CNSC Vehicle Pass System
           </h2>
