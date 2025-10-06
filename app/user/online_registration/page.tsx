@@ -7,7 +7,7 @@ interface Document {
   id: string;
   name: string;
   file: File;
-  type: 'orCrCopy' | 'driversLicenseCopy';
+  type: 'orCrCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale';
 }
 
 export default function Registration() {
@@ -31,7 +31,8 @@ export default function Registration() {
     orNumber: '',
     crNumber: '',
     driverName: '',
-    driverLicense: ''
+    driverLicense: '',
+    isNewVehicle: 'no' // Added for new vehicle condition
   });
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingApplicationId, setEditingApplicationId] = useState<string | null>(null);
@@ -80,6 +81,7 @@ export default function Registration() {
             crNumber: application.vehicleInfo?.crNumber || prev.crNumber,
             driverName: application.driverName || prev.driverName,
             driverLicense: application.driverLicense || prev.driverLicense,
+            isNewVehicle: application.vehicleInfo?.isNewVehicle || prev.isNewVehicle,
           }));
           
           // Lock affiliation if it was previously set
@@ -150,11 +152,9 @@ export default function Registration() {
     };
   }, [showToast]);
 
-  // Removed dummy autofill; use real user context if needed
-
   const [documents, setDocuments] = useState<Document[]>([]);
 
-  const onDrop = useCallback((acceptedFiles: File[], type: 'orCrCopy' | 'driversLicenseCopy') => {
+  const onDrop = useCallback((acceptedFiles: File[], type: 'orCrCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale') => {
     const newDocuments = acceptedFiles.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       name: file.name,
@@ -164,22 +164,49 @@ export default function Registration() {
     setDocuments(prev => [...prev, ...newDocuments]);
   }, []);
 
+  // Common accept configuration for all file types
+  const commonAcceptConfig = {
+    // Images
+    'image/jpeg': ['.jpg', '.jpeg'],
+    'image/jpg': ['.jpg', '.jpeg'],
+    'image/png': ['.png'],
+    'image/gif': ['.gif'],
+    'image/webp': ['.webp'],
+    'image/bmp': ['.bmp'],
+    
+    // Documents
+    'application/pdf': ['.pdf'],
+    'application/msword': ['.doc'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+    'text/plain': ['.txt'],
+    
+    // Spreadsheets
+    'application/vnd.ms-excel': ['.xls'],
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  };
+
   const { getRootProps: getOrcrRootProps, getInputProps: getOrcrInputProps, isDragActive: isOrcrDragActive } = useDropzone({
     onDrop: (files) => onDrop(files, 'orCrCopy'),
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg'],
-      'application/pdf': ['.pdf']
-    },
-    maxSize: 5242880 // 5MB
+    accept: commonAcceptConfig,
+    maxSize: 5 * 1024 * 1024 // 5MB
   });
 
   const { getRootProps: getLicenseRootProps, getInputProps: getLicenseInputProps, isDragActive: isLicenseDragActive } = useDropzone({
     onDrop: (files) => onDrop(files, 'driversLicenseCopy'),
-    accept: {
-      'image/*': ['.png', '.jpg', '.jpeg'],
-      'application/pdf': ['.pdf']
-    },
-    maxSize: 5242880 // 5MB
+    accept: commonAcceptConfig,
+    maxSize: 5 * 1024 * 1024 // 5MB
+  });
+
+  const { getRootProps: getAuthorizationRootProps, getInputProps: getAuthorizationInputProps, isDragActive: isAuthorizationDragActive } = useDropzone({
+    onDrop: (files) => onDrop(files, 'authorizationLetter'),
+    accept: commonAcceptConfig,
+    maxSize: 5 * 1024 * 1024 // 5MB
+  });
+
+  const { getRootProps: getDeedOfSaleRootProps, getInputProps: getDeedOfSaleInputProps, isDragActive: isDeedOfSaleDragActive } = useDropzone({
+    onDrop: (files) => onDrop(files, 'deedOfSale'),
+    accept: commonAcceptConfig,
+    maxSize: 5 * 1024 * 1024 // 5MB
   });
 
   const removeDocument = (id: string) => {
@@ -200,7 +227,7 @@ export default function Registration() {
       return 'File size is too large. Please upload files smaller than 5MB';
     }
     if (lowerMessage.includes('file type') || lowerMessage.includes('invalid format')) {
-      return 'Invalid file format. Please upload PNG, JPG, or PDF files only';
+      return 'Invalid file format. Please upload JPG, PNG, PDF, DOC, DOCX, TXT, XLS, or XLSX files only';
     }
     
     // Form validation errors
@@ -258,6 +285,10 @@ export default function Registration() {
     }));
   };
 
+  // Helper functions to check conditions
+  const isNotOwner = formData.vehicleUserType !== 'owner';
+  const isNewVehicle = formData.isNewVehicle === 'yes';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -277,6 +308,25 @@ export default function Registration() {
       setToast({ message: 'Please upload your driver\'s license', type: 'error' });
       setShowToast(true);
       return;
+    }
+
+    // Validate additional documents based on conditions
+    if (isNotOwner) {
+      const authorizationDocuments = documents.filter(doc => doc.type === 'authorizationLetter');
+      if (authorizationDocuments.length === 0) {
+        setToast({ message: 'Please upload authorization letter since you are not the vehicle owner', type: 'error' });
+        setShowToast(true);
+        return;
+      }
+    }
+
+    if (isNewVehicle) {
+      const deedOfSaleDocuments = documents.filter(doc => doc.type === 'deedOfSale');
+      if (deedOfSaleDocuments.length === 0) {
+        setToast({ message: 'Please upload deed of sale for new vehicle', type: 'error' });
+        setShowToast(true);
+        return;
+      }
     }
 
     try {
@@ -308,9 +358,17 @@ export default function Registration() {
       if (formData.crNumber) body.append('vehicleInfo[crNumber]', formData.crNumber);
       if (formData.driverName) body.append('driverName', formData.driverName);
       if (formData.driverLicense) body.append('driverLicense', formData.driverLicense);
+      body.append('vehicleInfo[isNewVehicle]', formData.isNewVehicle);
 
-      documents.forEach((doc) => {
-        body.append(doc.type, doc.file, doc.name);
+      documents.forEach((doc: any) => {
+        // Map frontend field names to backend field names
+        let fieldName = doc.type;
+        if (doc.type === 'authorizationLetter') {
+          fieldName = 'authLetter'; // Map to backend field name
+        } else if (doc.type === 'deedOfSale') {
+          fieldName = 'deedOfSale'; // Same name
+        }
+        body.append(fieldName, doc.file, doc.name);
       });
 
       const url = isEditMode && editingApplicationId 
@@ -360,6 +418,17 @@ export default function Registration() {
       setShowToast(true);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Helper function to get file type display name
+  const getFileTypeDisplayName = (type: string) => {
+    switch (type) {
+      case 'orCrCopy': return 'OR/CR';
+      case 'driversLicenseCopy': return 'Driver\'s License';
+      case 'authorizationLetter': return 'Authorization Letter';
+      case 'deedOfSale': return 'Deed of Sale';
+      default: return type;
     }
   };
 
@@ -613,6 +682,20 @@ export default function Registration() {
                 </select>
               </div>
               <div>
+                <label htmlFor="isNewVehicle" className="block text-sm font-medium text-gray-700">Is this a new vehicle?</label>
+                <select
+                  id="isNewVehicle"
+                  name="isNewVehicle"
+                  value={formData.isNewVehicle}
+                  onChange={handleChange}
+                  required
+                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                >
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </div>
+              <div>
                 <label htmlFor="plateNumber" className="block text-sm font-medium text-gray-700">Plate Number</label>
                 <input
                   type="text"
@@ -676,7 +759,9 @@ export default function Registration() {
           {/* Required Documents */}
           <div className="border-b border-gray-200 pb-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Required Documents</h2>
-            <p className="text-sm text-gray-600 mb-4">Upload your ORCR and driver's license. Maximum file size: 5MB</p>
+            <p className="text-sm text-gray-600 mb-4">
+              Upload your documents. Maximum file size: 5MB. Allowed formats: JPG, PNG, GIF, WEBP, BMP, PDF, DOC, DOCX, TXT, XLS, XLSX
+            </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* ORCR Upload */}
@@ -714,7 +799,7 @@ export default function Registration() {
                         </p>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, PDF up to 5MB</p>
+                    <p className="text-xs text-gray-500">JPG, PNG, PDF, DOC, DOCX, TXT, XLS, XLSX up to 5MB</p>
                   </div>
                 </div>
               </div>
@@ -754,10 +839,96 @@ export default function Registration() {
                         </p>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500">PNG, JPG, PDF up to 5MB</p>
+                    <p className="text-xs text-gray-500">JPG, PNG, PDF, DOC, DOCX, TXT, XLS, XLSX up to 5MB</p>
                   </div>
                 </div>
               </div>
+
+              {/* Authorization Letter Upload (shown if not owner) */}
+              {isNotOwner && (
+                <div className="md:col-span-2">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Authorization Letter from Vehicle Owner</h3>
+                  <p className="text-sm text-gray-600 mb-2">Required since you are not the vehicle owner</p>
+                  <div
+                    {...getAuthorizationRootProps()}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                      isAuthorizationDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                    }`}
+                  >
+                    <input {...getAuthorizationInputProps()} />
+                    <div className="space-y-2">
+                      <svg
+                        className="mx-auto h-12 w-12 text-gray-400"
+                        stroke="currentColor"
+                        fill="none"
+                        viewBox="0 0 48 48"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <div className="text-sm text-gray-600">
+                        {isAuthorizationDragActive ? (
+                          <p>Drop the authorization letter here ...</p>
+                        ) : (
+                          <p>
+                            Drag and drop authorization letter here, or{' '}
+                            <span className="text-[#7E0303] font-medium">click to select file</span>
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">JPG, PNG, PDF, DOC, DOCX, TXT, XLS, XLSX up to 5MB</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Deed of Sale Upload (shown if new vehicle) */}
+              {isNewVehicle && (
+                <div className="md:col-span-2">
+                  <h3 className="text-sm font-medium text-gray-900 mb-2">Deed of Sale</h3>
+                  <p className="text-sm text-gray-600 mb-2">Required for new vehicles</p>
+                  <div
+                    {...getDeedOfSaleRootProps()}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                      isDeedOfSaleDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                    }`}
+                  >
+                    <input {...getDeedOfSaleInputProps()} />
+                    <div className="space-y-2">
+                      <svg
+                        className="mx-auto h-12 w-12 text-gray-400"
+                        stroke="currentColor"
+                        fill="none"
+                        viewBox="0 0 48 48"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                          strokeWidth={2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <div className="text-sm text-gray-600">
+                        {isDeedOfSaleDragActive ? (
+                          <p>Drop the deed of sale here ...</p>
+                        ) : (
+                          <p>
+                            Drag and drop deed of sale here, or{' '}
+                            <span className="text-[#7E0303] font-medium">click to select file</span>
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">JPG, PNG, PDF, DOC, DOCX, TXT, XLS, XLSX up to 5MB</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Document List */}
@@ -788,7 +959,7 @@ export default function Registration() {
                           <p className="text-sm font-medium text-gray-900">
                             {doc.name}
                             <span className="ml-2 text-xs text-gray-500">
-                              ({doc.type === 'orCrCopy' ? 'OR/CR' : 'Driver\'s License'})
+                              ({getFileTypeDisplayName(doc.type)})
                             </span>
                           </p>
                           <p className="text-xs text-gray-500">
@@ -822,8 +993,6 @@ export default function Registration() {
             )}
           </div>
 
-          {/* Pass Information removed for user online registration */}
-
           <div className="flex justify-end">
             <button
               type="submit"
@@ -851,4 +1020,4 @@ export default function Registration() {
       </div>
     </div>
   );
-} 
+}
