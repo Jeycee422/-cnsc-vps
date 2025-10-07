@@ -60,6 +60,11 @@ export default function Home() {
           router.push('/security/scans');
           return;
         }
+        // Redirect system admins to system admin area
+        if (composedUser.role === 'system_admin') {
+          router.push('/system_admin/security_guards');
+          return;
+        }
       } catch (err) {
         if (err && typeof err === 'object' && (err as any).name === 'AbortError') {
           return;
@@ -131,15 +136,7 @@ export default function Home() {
           <h1 className="text-2xl font-semibold text-gray-900">Welcome back, {user?.name || 'User'}</h1>
           <p className="text-gray-600">Here's an overview of your vehicle pass</p>
         </div>
-        <button
-          onClick={() => {
-            localStorage.removeItem('token');
-            router.push('/signin');
-          }}
-          className="px-4 py-2 text-[#7E0303] border-2 border-[#7E0303] rounded-md hover:bg-[#7E0303] hover:text-white transition-colors"
-        >
-          Sign Out
-        </button>
+        
       </div>
 
       {/* Vehicle Pass Status */}
@@ -155,6 +152,7 @@ export default function Home() {
           <div className="space-y-4">
             {applications.map((application, index) => {
               const displayStatus = application.status === 'registered' ? 'Active' : application.status.charAt(0).toUpperCase() + application.status.slice(1);
+              const derivedExpiry = application.expiryDate || application?.rfidInfo?.validUntil || '';
               const getStatusColor = (status: string) => {
                 switch (status) {
                   case 'registered':
@@ -206,7 +204,7 @@ export default function Home() {
                     <div>
                       <h4 className="text-sm font-medium text-gray-700 mb-1">Expiry Date</h4>
                       <p className="text-sm text-gray-600">
-                        {application.expiryDate ? new Date(application.expiryDate).toLocaleDateString() : '—'}
+                        {derivedExpiry ? new Date(derivedExpiry).toLocaleDateString() : '—'}
                       </p>
                     </div>
                   </div>
@@ -244,41 +242,7 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Recent Activity</h2>
-        </div>
-        <div className="divide-y divide-gray-200">
-          {[
-            {
-              action: 'Pass Renewed',
-              date: 'March 15, 2024',
-              status: 'Completed'
-            },
-            {
-              action: 'Vehicle Details Updated',
-              date: 'March 10, 2024',
-              status: 'Completed'
-            },
-            {
-              action: 'New Pass Issued',
-              date: 'January 1, 2024',
-              status: 'Completed'
-            }
-          ].map((activity, index) => (
-            <div key={index} className="px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-                  <p className="text-sm text-gray-500">{activity.date}</p>
-                </div>
-                <span className="text-sm text-green-600">{activity.status}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+      
     </div>
   );
 } 

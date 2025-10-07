@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { ref, onValue, off } from 'firebase/database';
+import { ref, onValue, off, query, orderByChild, equalTo, get } from 'firebase/database';
 import { db } from '@/lib/firebase-client';
 import { jwtDecode } from 'jwt-decode';
 
@@ -77,6 +77,7 @@ export default function UserLayout({
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const pathname = usePathname();
@@ -101,32 +102,69 @@ export default function UserLayout({
 
   useEffect(() => {
     const userId = getCurrentUserId;
-    if (!userId) return;
+    console.log('[notifications] init', {
+      userId,
+      dbURL: (typeof window !== 'undefined') ? (process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || 'env not set') : 'ssr'
+    });
+    if (!userId) {
+      console.log('[notifications] skipped: no userId decoded from token');
+      return;
+    }
 
-    const notificationsRef = ref(db, `notifications/${userId}`);
-    
-    const unsubscribe = onValue(notificationsRef, (snapshot) => {
-      const data = snapshot.val() as Record<string, NotificationData> | null;
-      if (data) {
-        const notificationsArray: Notification[] = Object.entries(data)
-          .map(([key, value]) => ({
-            id: key,
-            ...value
-          }))
-          .sort((a, b) => b.createdAt - a.createdAt);
-        
-        setNotifications(notificationsArray);
-        setUnreadCount(notificationsArray.length);
-      } else {
-        setNotifications([]);
-        setUnreadCount(0);
+    const perUserRef = ref(db, `notifications/${userId}`);
+    const userNestedRef = ref(db, `users/${userId}/notifications`);
+    const rootByUserQuery = query(ref(db, 'notifications'), orderByChild('userId'), equalTo(userId));
+
+    // One-time debug reads
+    get(perUserRef).then(s => console.log('[notifications][debug get] perUserRef', s.val())).catch(err => console.warn('[notifications][debug get] perUserRef error', err?.message));
+    get(userNestedRef).then(s => console.log('[notifications][debug get] userNestedRef', s.val())).catch(err => console.warn('[notifications][debug get] userNestedRef error', err?.message));
+    get(ref(db, 'notifications')).then(s => console.log('[notifications][debug get] root notifications', s.val())).catch(err => console.warn('[notifications][debug get] root error', err?.message));
+
+    const collect = (obj: Record<string, NotificationData> | null, prefix: string) => {
+      const out: Notification[] = [];
+      if (!obj) return out;
+      for (const [k, v] of Object.entries(obj)) {
+        const createdAtRaw: any = (v as any)?.createdAt;
+        const createdAt = typeof createdAtRaw === 'number' ? createdAtRaw : (createdAtRaw ? new Date(createdAtRaw).getTime() : Date.now());
+        out.push({ id: `${prefix}${k}`, ...(v as any), createdAt });
       }
+      return out;
+    };
+
+    const recompute = (
+      a: Record<string, NotificationData> | null,
+      b: Record<string, NotificationData> | null,
+      c: Record<string, NotificationData> | null
+    ) => {
+      const merged = [...collect(a, 'a:'), ...collect(b, 'b:'), ...collect(c, 'c:')]
+        .sort((x, y) => (y.createdAt || 0) - (x.createdAt || 0));
+      setNotifications(merged);
+      setUnreadCount(merged.length);
+    };
+
+    let aData: Record<string, NotificationData> | null = null;
+    let bData: Record<string, NotificationData> | null = null;
+    let cData: Record<string, NotificationData> | null = null;
+
+    const unsubA = onValue(perUserRef, (snap) => {
+      aData = snap.val();
+      console.log('[notifications] perUserRef', { path: `notifications/${userId}`, value: aData });
+      recompute(aData, bData, cData);
+    });
+    const unsubB = onValue(userNestedRef, (snap) => {
+      bData = snap.val();
+      console.log('[notifications] userNestedRef', { path: `users/${userId}/notifications`, value: bData });
+      recompute(aData, bData, cData);
+    });
+    const unsubC = onValue(rootByUserQuery, (snap) => {
+      cData = snap.val();
+      console.log('[notifications] rootByUserQuery', { path: 'notifications (root, by userId)', value: cData });
+      recompute(aData, bData, cData);
     });
 
-    // Cleanup subscription
     return () => {
-      off(notificationsRef);
-      unsubscribe();
+      off(perUserRef); off(userNestedRef); off(rootByUserQuery);
+      unsubA(); unsubB(); unsubC();
     };
   }, [getCurrentUserId]);
 
@@ -332,14 +370,32 @@ export default function UserLayout({
               </div>
 
               {/* User menu */}
-              <Link 
-                href="/user/profile"
-                className="text-gray-500 hover:text-gray-600"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </Link>
+              <div className="relative">
+                <button
+                  className="text-gray-500 hover:text-gray-600"
+                  onClick={() => setUserMenuOpen((v) => !v)}
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </button>
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                    <div className="py-2">
+                      <Link href="/user/profile" className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Profile</Link>
+                      <button
+                        onClick={() => {
+                          try { localStorage.removeItem('token'); } catch {}
+                          window.location.href = '/signin';
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -361,6 +417,12 @@ export default function UserLayout({
         <div 
           className="fixed inset-0 z-30"
           onClick={() => setNotificationsOpen(false)}
+        />
+      )}
+      {userMenuOpen && (
+        <div
+          className="fixed inset-0 z-30"
+          onClick={() => setUserMenuOpen(false)}
         />
       )}
     </div>

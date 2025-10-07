@@ -217,8 +217,10 @@ export default function Applications() {
 
   useEffect(() => {
     const ac = new AbortController();
-    fetchApplications(ac.signal);
-    return () => ac.abort();
+    fetchApplications(ac.signal).catch(() => {});
+    return () => {
+      try { ac.abort(); } catch {}
+    };
   }, [token, userRole, statusFilter]);
 
   // Fetch user role
@@ -244,12 +246,13 @@ export default function Applications() {
         const data = await res.json();
         const userData = data.user || data;
         setUserRole(userData.role || userData.userType || '');
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
         console.error('Error fetching user role:', error);
       }
     })();
     
-    return () => ac.abort();
+    return () => { try { ac.abort(); } catch {} };
   }, [token]);
 
   // WebSocket connection for real-time updates
@@ -273,7 +276,7 @@ export default function Applications() {
     });
     
     return () => {
-      socket.disconnect();
+      try { socket.disconnect(); } catch {}
     };
   }, [token]);
 
@@ -336,7 +339,7 @@ export default function Applications() {
     return /\.(doc|docx)$/i.test(fileName);
   };
 
-  // FIXED: Enhanced document URL generation with proper endpoint structure
+  // FIXED: Route document access through Next proxy to include auth for <img>/<embed>
   const getDocumentUrl = (doc: Document, applicationId?: string): string => {
     console.log('Generating URL for document:', doc);
     
@@ -345,30 +348,28 @@ export default function Applications() {
       return '';
     }
 
-    // If document has a direct URL, use it
+    // If document has a direct absolute URL, use it as-is
     if (doc.url && typeof doc.url === 'string' && doc.url.trim() !== '') {
       const url = doc.url.trim();
       if (/^https?:\/\//i.test(url)) {
         return url;
       }
-      // If it's a relative URL, prepend the API base
-      const needsSlash = !(API_BASE.endsWith('/') || url.startsWith('/'));
-      return `${API_BASE}${needsSlash ? '/' : ''}${url}`;
+      // Fall through to proxy below for relative URLs so we can attach auth
     }
 
-    // FIXED: Use the correct backend endpoint structure
-    let url = '';
-    
+    // Build proxy URL so images/PDFs load with credentials via token query
+    const params = new URLSearchParams();
+    params.set('applicationId', applicationId);
+    params.set('fileType', doc.type);
     if (doc.type === 'orCrCopy' && doc.index) {
-      // For OR/CR copies with index (multiple files)
-      url = `${API_BASE}/api/vehicle-passes/files/${applicationId}/orCrCopy/${doc.index}`;
-    } else {
-      // For single file types
-      url = `${API_BASE}/api/vehicle-passes/files/${applicationId}/${doc.type}`;
+      params.set('index', String(doc.index));
     }
-    
-    console.log('Generated document URL:', url);
-    return url;
+    if (token) {
+      params.set('token', token);
+    }
+    const proxyUrl = `/api/proxy/file?${params.toString()}`;
+    console.log('Generated document proxy URL:', proxyUrl);
+    return proxyUrl;
   };
 
   // FIXED: Enhanced document preview with proper error handling
@@ -1212,6 +1213,10 @@ export default function Applications() {
                         let displayName = '';
                         if (doc.type === 'orCrCopy') {
                           displayName = doc.index ? `OR/CR Copy ${doc.index}` : 'OR/CR Copy';
+                        } else if (doc.type === 'orCopy') {
+                          displayName = 'Official Receipt (OR)';
+                        } else if (doc.type === 'crCopy') {
+                          displayName = 'Certificate of Registration (CR)';
                         } else if (doc.type === 'driversLicenseCopy') {
                           displayName = 'Driver\'s License Copy';
                         } else if (doc.type === 'authLetter') {

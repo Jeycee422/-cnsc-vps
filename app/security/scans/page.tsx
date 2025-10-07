@@ -19,6 +19,35 @@ export default function SecurityScans() {
   const [realTimeScans, setRealTimeScans] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Helper function for date display with expiration check
+  const formatValidUntil = (validUntilString: string) => {
+    if (!validUntilString) return null;
+    
+    try {
+      const date = new Date(validUntilString);
+      // Check if the date is valid
+      if (isNaN(date.getTime())) return null;
+      
+      const now = new Date();
+      const isExpired = date < now;
+      const isExpiringSoon = date < new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
+      
+      return {
+        display: date.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'short', 
+          day: 'numeric' 
+        }),
+        isExpired,
+        isExpiringSoon: !isExpired && isExpiringSoon,
+        color: isExpired ? 'text-red-600' : isExpiringSoon ? 'text-amber-600' : 'text-gray-500'
+      };
+    } catch (error) {
+      console.error('Error parsing date:', error);
+      return null;
+    }
+  };
+
   // Real-time Firebase listener for RFID scans
   useEffect(() => {
     const scansRef = query(
@@ -131,6 +160,9 @@ export default function SecurityScans() {
             const vehicleType = scan.vehicle?.vehicleType || '';
             const icon = renderVehicleIcon(vehicleType);
             
+            // Get validUntil information with proper formatting
+            const validUntilInfo = formatValidUntil(scan.rfidValidity?.validUntil);
+            
             return (
               <div key={scan.id || index} className="px-6 py-4">
                 <div className="flex items-center justify-between">
@@ -156,7 +188,35 @@ export default function SecurityScans() {
                         {scan.scanMessage}
                       </p>
                       {scan.vehicle?.driverName && (
-                        <p className="text-xs text-gray-400">Driver: {scan.vehicle.driverName}</p>
+                        <p className="text-xs text-gray-500">Driver: {scan.vehicle.driverName}</p>
+                      )}
+                      
+                      {/* RFID Status Information */}
+                      <div className="flex items-center space-x-4 mt-1">
+                        {scan.rfidValidity?.isActive !== undefined && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            scan.rfidValidity.isActive 
+                              ? 'text-green-700 bg-green-100' 
+                              : 'text-red-700 bg-red-100'
+                          }`}>
+                            RFID: {scan.rfidValidity.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        )}
+                        
+                        {validUntilInfo && (
+                          <span className={`text-xs px-2 py-0.5 rounded ${validUntilInfo.color} bg-gray-100`}>
+                            Valid Until: {validUntilInfo.display}
+                            {validUntilInfo.isExpired && ' (Expired)'}
+                            {validUntilInfo.isExpiringSoon && ' (Expiring Soon)'}
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Assigned Date if available */}
+                      {scan.rfidValidity?.assignedAt && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Assigned: {new Date(scan.rfidValidity.assignedAt).toLocaleDateString()}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -167,6 +227,11 @@ export default function SecurityScans() {
                     <span className="text-xs text-gray-400">
                       {new Date(scan.scanTimestamp).toLocaleDateString()}
                     </span>
+                    {scan.responseTime && (
+                      <span className="text-xs text-gray-400 block mt-1">
+                        {scan.responseTime}ms
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

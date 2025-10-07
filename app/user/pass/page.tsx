@@ -108,6 +108,11 @@ export default function VehiclePass() {
           router.push('/security/scans');
           return;
         }
+        // Redirect system admins to system admin area
+        if (composedUser.role === 'system_admin') {
+          router.push('/system_admin/security_guards');
+          return;
+        }
       } catch (err) {
         // Ignore aborts
         if (err && typeof err === 'object' && (err as any).name === 'AbortError') {
@@ -336,6 +341,7 @@ export default function VehiclePass() {
                     const vehType = p.vehicleInfo?.type || p.vehicleDetails?.type || '';
                     const plate = p.vehicleInfo?.plateNumber || p.vehicleDetails?.plateNumber || '';
                     const displayStatus = p.status === 'registered' ? 'active' : p.status;
+                    const derivedExpiry = p.expiryDate || (p as any)?.rfidInfo?.validUntil || '';
                     const statusColor = displayStatus === 'active'
                       ? 'bg-green-100 text-green-800'
                       : displayStatus === 'approved'
@@ -360,7 +366,7 @@ export default function VehiclePass() {
                             {displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
                           </span>
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.expiryDate ? new Date(p.expiryDate).toLocaleDateString() : '—'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{derivedExpiry ? new Date(derivedExpiry).toLocaleDateString() : '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="space-y-2">

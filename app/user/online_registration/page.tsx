@@ -7,7 +7,7 @@ interface Document {
   id: string;
   name: string;
   file: File;
-  type: 'orCrCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale';
+  type: 'orCopy' | 'crCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale';
 }
 
 export default function Registration() {
@@ -154,7 +154,7 @@ export default function Registration() {
 
   const [documents, setDocuments] = useState<Document[]>([]);
 
-  const onDrop = useCallback((acceptedFiles: File[], type: 'orCrCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale') => {
+const onDrop = useCallback((acceptedFiles: File[], type: 'orCopy' | 'crCopy' | 'driversLicenseCopy' | 'authorizationLetter' | 'deedOfSale') => {
     const newDocuments = acceptedFiles.map(file => ({
       id: Math.random().toString(36).substr(2, 9),
       name: file.name,
@@ -185,11 +185,17 @@ export default function Registration() {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
   };
 
-  const { getRootProps: getOrcrRootProps, getInputProps: getOrcrInputProps, isDragActive: isOrcrDragActive } = useDropzone({
-    onDrop: (files) => onDrop(files, 'orCrCopy'),
-    accept: commonAcceptConfig,
-    maxSize: 5 * 1024 * 1024 // 5MB
-  });
+const { getRootProps: getOrRootProps, getInputProps: getOrInputProps, isDragActive: isOrDragActive } = useDropzone({
+  onDrop: (files) => onDrop(files, 'orCopy'),
+  accept: commonAcceptConfig,
+  maxSize: 5 * 1024 * 1024 // 5MB
+});
+
+const { getRootProps: getCrRootProps, getInputProps: getCrInputProps, isDragActive: isCrDragActive } = useDropzone({
+  onDrop: (files) => onDrop(files, 'crCopy'),
+  accept: commonAcceptConfig,
+  maxSize: 5 * 1024 * 1024 // 5MB
+});
 
   const { getRootProps: getLicenseRootProps, getInputProps: getLicenseInputProps, isDragActive: isLicenseDragActive } = useDropzone({
     onDrop: (files) => onDrop(files, 'driversLicenseCopy'),
@@ -295,14 +301,20 @@ export default function Registration() {
     setSuccessMessage('');
 
     // Validate required documents
-    const orcrDocuments = documents.filter(doc => doc.type === 'orCrCopy');
+  const orDocuments = documents.filter(doc => doc.type === 'orCopy');
+  const crDocuments = documents.filter(doc => doc.type === 'crCopy');
     const licenseDocuments = documents.filter(doc => doc.type === 'driversLicenseCopy');
     
-    if (orcrDocuments.length === 0) {
-      setToast({ message: 'Please upload your OR/CR document', type: 'error' });
+  if (orDocuments.length === 0) {
+    setToast({ message: 'Please upload your Official Receipt (OR)', type: 'error' });
       setShowToast(true);
       return;
     }
+  if (crDocuments.length === 0) {
+    setToast({ message: 'Please upload your Certificate of Registration (CR)', type: 'error' });
+    setShowToast(true);
+    return;
+  }
     
     if (licenseDocuments.length === 0) {
       setToast({ message: 'Please upload your driver\'s license', type: 'error' });
@@ -364,9 +376,13 @@ export default function Registration() {
         // Map frontend field names to backend field names
         let fieldName = doc.type;
         if (doc.type === 'authorizationLetter') {
-          fieldName = 'authLetter'; // Map to backend field name
+          fieldName = 'authLetter';
         } else if (doc.type === 'deedOfSale') {
-          fieldName = 'deedOfSale'; // Same name
+          fieldName = 'deedOfSale';
+        } else if (doc.type === 'orCopy') {
+          fieldName = 'orCopy';
+        } else if (doc.type === 'crCopy') {
+          fieldName = 'crCopy';
         }
         body.append(fieldName, doc.file, doc.name);
       });
@@ -412,9 +428,10 @@ export default function Registration() {
       }, 2000);
     } catch (err: unknown) {
       const rawMessage = err instanceof Error ? err.message : 'Unknown error';
-      const friendlyMessage = getUserFriendlyErrorMessage(rawMessage);
-      setErrorMessage(friendlyMessage);
-      setToast({ message: friendlyMessage, type: 'error' });
+      // Prefer showing the backend message directly to aid troubleshooting
+      console.error('Application submit failed:', rawMessage);
+      setErrorMessage(rawMessage);
+      setToast({ message: rawMessage, type: 'error' });
       setShowToast(true);
     } finally {
       setIsSubmitting(false);
@@ -424,7 +441,8 @@ export default function Registration() {
   // Helper function to get file type display name
   const getFileTypeDisplayName = (type: string) => {
     switch (type) {
-      case 'orCrCopy': return 'OR/CR';
+      case 'orCopy': return 'Official Receipt (OR)';
+      case 'crCopy': return 'Certificate of Registration (CR)';
       case 'driversLicenseCopy': return 'Driver\'s License';
       case 'authorizationLetter': return 'Authorization Letter';
       case 'deedOfSale': return 'Deed of Sale';
@@ -764,16 +782,16 @@ export default function Registration() {
             </p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* ORCR Upload */}
+              {/* OR Upload */}
               <div>
-                <h3 className="text-sm font-medium text-gray-900 mb-2">ORCR Document</h3>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Official Receipt (OR)</h3>
                 <div
-                  {...getOrcrRootProps()}
+                  {...getOrRootProps()}
                   className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
-                    isOrcrDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                    isOrDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
                   }`}
                 >
-                  <input {...getOrcrInputProps()} />
+                  <input {...getOrInputProps()} />
                   <div className="space-y-2">
                     <svg
                       className="mx-auto h-12 w-12 text-gray-400"
@@ -790,11 +808,51 @@ export default function Registration() {
                       />
                     </svg>
                     <div className="text-sm text-gray-600">
-                      {isOrcrDragActive ? (
-                        <p>Drop the ORCR here ...</p>
+                      {isOrDragActive ? (
+                        <p>Drop the OR here ...</p>
                       ) : (
                         <p>
-                          Drag and drop your ORCR here, or{' '}
+                          Drag and drop your OR here, or{' '}
+                          <span className="text-[#7E0303] font-medium">click to select file</span>
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">JPG, PNG, PDF, DOC, DOCX, TXT, XLS, XLSX up to 5MB</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* CR Upload */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-900 mb-2">Certificate of Registration (CR)</h3>
+                <div
+                  {...getCrRootProps()}
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${
+                    isCrDragActive ? 'border-[#7E0303] bg-red-50' : 'border-gray-300 hover:border-[#7E0303]'
+                  }`}
+                >
+                  <input {...getCrInputProps()} />
+                  <div className="space-y-2">
+                    <svg
+                      className="mx-auto h-12 w-12 text-gray-400"
+                      stroke="currentColor"
+                      fill="none"
+                      viewBox="0 0 48 48"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                    <div className="text-sm text-gray-600">
+                      {isCrDragActive ? (
+                        <p>Drop the CR here ...</p>
+                      ) : (
+                        <p>
+                          Drag and drop your CR here, or{' '}
                           <span className="text-[#7E0303] font-medium">click to select file</span>
                         </p>
                       )}

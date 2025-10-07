@@ -52,6 +52,42 @@ export default function Registration() {
     }));
   };
 
+  // Function to parse and format error messages
+  const formatErrorMessage = (error: string): string => {
+    // Handle authentication errors
+    if (error.includes('Not authenticated') || error.includes('token') || error.includes('auth')) {
+      return 'Authentication failed. Please log in again.';
+    }
+    
+    // Handle duplicate vehicle errors
+    if (error.includes('already been registered') || error.includes('An application already exists for this vehicle')) {
+      return error; // These are already user-friendly from backend
+    }
+    
+    // Handle missing fields errors
+    if (error.includes('Missing required fields')) {
+      return 'Please fill in all required fields.';
+    }
+    
+    // Handle network errors
+    if (error.includes('Failed to fetch') || error.includes('Network')) {
+      return 'Network error. Please check your connection and try again.';
+    }
+    
+    // Handle server errors
+    if (error.includes('Failed to create') || error.includes('server')) {
+      return 'Server error. Please try again later.';
+    }
+    
+    // Handle JSON parse errors
+    if (error.includes('Unexpected token') || error.includes('JSON')) {
+      return 'Invalid response from server. Please try again.';
+    }
+    
+    // For unknown errors, show a generic message
+    return 'An unexpected error occurred. Please try again.';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -59,7 +95,10 @@ export default function Registration() {
     try {
       setIsSubmitting(true);
       const token = (typeof window !== 'undefined') ? (localStorage.getItem('token') || '') : '';
-      if (!token) throw new Error('Not authenticated');
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+      
       const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
       const payload = {
         familyName: formData.applicantFamilyName,
@@ -86,21 +125,75 @@ export default function Registration() {
 
       const res = await fetch(`${API_BASE}/api/walkins/application`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'Content-Type': 'application/json' 
+        },
         body: JSON.stringify(payload)
       });
-      if (!res.ok) {
+      
+      let responseData;
+      const contentType = res.headers.get('content-type');
+      
+      if (contentType && contentType.includes('application/json')) {
+        responseData = await res.json();
+      } else {
         const text = await res.text();
-        throw new Error(text || 'Failed to submit application');
+        throw new Error(text || `HTTP error! status: ${res.status}`);
       }
-      await res.json();
+
+      if (!res.ok) {
+        throw new Error(responseData.error || responseData.message || `Request failed with status ${res.status}`);
+      }
+      
+      // Success case
       setSuccessMessage('Application submitted successfully');
-      setToast({ message: 'Application submitted successfully', type: 'success' });
+      setToast({ 
+        message: 'Vehicle registration submitted successfully!', 
+        type: 'success' 
+      });
       setShowToast(true);
+      
+      // Reset form on success
+      setFormData({
+        applicantFamilyName: '',
+        applicantGivenName: '',
+        applicantMiddleName: '',
+        homeAddress: '',
+        schoolAffiliation: 'student',
+        otherAffiliation: '',
+        idNumber: '',
+        contactNumber: '',
+        employmentStatus: 'Permanent',
+        company: 'n/a',
+        purpose: 'n/a',
+        guardianName: '',
+        guardianAddress: '',
+        vehicleUserType: 'owner',
+        vehicleType: 'motorcycle',
+        plateNumber: '',
+        orNumber: '',
+        crNumber: '',
+        driverName: '',
+        driverLicense: ''
+      });
+      
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      setErrorMessage(msg);
-      setToast({ message: msg, type: 'error' });
+      console.error('Submission error:', err);
+      
+      let errorMessage = 'An unexpected error occurred';
+      
+      if (err instanceof Error) {
+        errorMessage = formatErrorMessage(err.message);
+      } else if (typeof err === 'string') {
+        errorMessage = formatErrorMessage(err);
+      }
+      
+      setErrorMessage(errorMessage);
+      setToast({ 
+        message: errorMessage, 
+        type: 'error' 
+      });
       setShowToast(true);
     } finally {
       setIsSubmitting(false);
@@ -115,25 +208,39 @@ export default function Registration() {
 
       <div className="bg-white rounded-lg shadow p-6">
         {showToast && (
-          <div className={`fixed top-6 right-6 z-50 min-w-[280px] max-w-sm rounded-md shadow-lg border ${toast.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+          <div className={`fixed top-6 right-6 z-50 min-w-[280px] max-w-sm rounded-md shadow-lg border ${
+            toast.type === 'success' 
+              ? 'bg-green-50 border-green-200' 
+              : 'bg-red-50 border-red-200'
+          }`}>
             <div className="flex items-start p-4">
-              <div className={`mr-3 mt-0.5 ${toast.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+              <div className={`mr-3 mt-0.5 ${
+                toast.type === 'success' ? 'text-green-600' : 'text-red-600'
+              }`}>
                 {toast.type === 'success' ? (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
                 ) : (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12A9 9 0 113 12a9 9 0 0118 0z"/></svg>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12A9 9 0 113 12a9 9 0 0118 0z"/>
+                  </svg>
                 )}
               </div>
               <div className="flex-1 text-sm text-gray-800">{toast.message}</div>
-              <button onClick={() => setShowToast(false)} className="ml-3 text-gray-500 hover:text-gray-700">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+              <button 
+                onClick={() => setShowToast(false)} 
+                className="ml-3 text-gray-500 hover:text-gray-700"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
               </button>
             </div>
           </div>
         )}
+        
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Toast replaces inline messages */}
-
           {/* Applicant Information */}
           <div className="border-b border-gray-200 pb-6">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Applicant Information</h2>
@@ -201,20 +308,23 @@ export default function Registration() {
                 </select>
               </div>
               {formData.schoolAffiliation === 'other' && (
-              <div className="md:col-span-2">
-                <label htmlFor="otherAffiliation" className="block text-sm font-medium text-gray-700">Others (Please Specify)</label>
-                <input
-                  type="text"
-                  id="otherAffiliation"
-                  name="otherAffiliation"
-                  value={formData.otherAffiliation}
-                  onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
+                <div className="md:col-span-2">
+                  <label htmlFor="otherAffiliation" className="block text-sm font-medium text-gray-700">Others (Please Specify)</label>
+                  <input
+                    type="text"
+                    id="otherAffiliation"
+                    name="otherAffiliation"
+                    value={formData.otherAffiliation}
+                    onChange={handleChange}
+                    className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  />
+                </div>
               )}
               <div className="md:col-span-1">
-                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">{formData.schoolAffiliation === 'student' ? 'Student No.' : (formData.schoolAffiliation === 'personnel' ? 'Employee No.' : 'ID Number')}</label>
+                <label htmlFor="idNumber" className="block text-sm font-medium text-gray-700">
+                  {formData.schoolAffiliation === 'student' ? 'Student No.' : 
+                   formData.schoolAffiliation === 'personnel' ? 'Employee No.' : 'ID Number'}
+                </label>
                 <input
                   type="text"
                   id="idNumber"
@@ -238,21 +348,21 @@ export default function Registration() {
                 />
               </div>
               {formData.schoolAffiliation === 'personnel' && (
-              <div className="md:col-span-1">
-                <label htmlFor="employmentStatus" className="block text-sm font-medium text-gray-700">Status of Employment</label>
-                <select
-                  id="employmentStatus"
-                  name="employmentStatus"
-                  value={formData.employmentStatus}
-                  onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                >
-                  <option value="Permanent">Permanent</option>
-                  <option value="Temporary">Temporary</option>
-                  <option value="Casual">Casual</option>
-                  <option value="Job Order">Job Order</option>
-                </select>
-              </div>
+                <div className="md:col-span-1">
+                  <label htmlFor="employmentStatus" className="block text-sm font-medium text-gray-700">Status of Employment</label>
+                  <select
+                    id="employmentStatus"
+                    name="employmentStatus"
+                    value={formData.employmentStatus}
+                    onChange={handleChange}
+                    className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  >
+                    <option value="Permanent">Permanent</option>
+                    <option value="Temporary">Temporary</option>
+                    <option value="Casual">Casual</option>
+                    <option value="Job Order">Job Order</option>
+                  </select>
+                </div>
               )}
               {formData.schoolAffiliation === 'other' && (
                 <>
@@ -281,30 +391,30 @@ export default function Registration() {
                 </>
               )}
               {formData.schoolAffiliation === 'student' && (
-              <div className="md:col-span-1">
-                <label htmlFor="guardianName" className="block text-sm font-medium text-gray-700">Name of Parent/Guardian (for student applicant)</label>
-                <input
-                  type="text"
-                  id="guardianName"
-                  name="guardianName"
-                  value={formData.guardianName}
-                  onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
+                <div className="md:col-span-1">
+                  <label htmlFor="guardianName" className="block text-sm font-medium text-gray-700">Name of Parent/Guardian (for student applicant)</label>
+                  <input
+                    type="text"
+                    id="guardianName"
+                    name="guardianName"
+                    value={formData.guardianName}
+                    onChange={handleChange}
+                    className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  />
+                </div>
               )}
               {formData.schoolAffiliation === 'student' && (
-              <div className="md:col-span-2">
-                <label htmlFor="guardianAddress" className="block text-sm font-medium text-gray-700">Parent's/Guardian Address</label>
-                <input
-                  type="text"
-                  id="guardianAddress"
-                  name="guardianAddress"
-                  value={formData.guardianAddress}
-                  onChange={handleChange}
-                  className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
-                />
-              </div>
+                <div className="md:col-span-2">
+                  <label htmlFor="guardianAddress" className="block text-sm font-medium text-gray-700">Parent's/Guardian Address</label>
+                  <input
+                    type="text"
+                    id="guardianAddress"
+                    name="guardianAddress"
+                    value={formData.guardianAddress}
+                    onChange={handleChange}
+                    className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  />
+                </div>
               )}
             </div>
           </div>
@@ -360,6 +470,7 @@ export default function Registration() {
                   onChange={handleChange}
                   required
                   className="mt-1 block w-full rounded-md border-2 border-gray-300 py-3 px-4 focus:border-[#7E0303] focus:ring-0 focus:outline-none"
+                  placeholder="e.g., ABC123"
                 />
               </div>
               <div>
@@ -375,7 +486,7 @@ export default function Registration() {
                 />
               </div>
               <div>
-                <label htmlFor="crNumber" className="block text sm font-medium text-gray-700">C.R. Number</label>
+                <label htmlFor="crNumber" className="block text-sm font-medium text-gray-700">C.R. Number</label>
                 <input
                   type="text"
                   id="crNumber"
@@ -411,8 +522,6 @@ export default function Registration() {
             </div>
           </div>
 
-          {/* Removed Required Documents and Pass Information as requested */}
-
           <div className="flex justify-end space-x-4">
             <button
               type="button"
@@ -432,4 +541,4 @@ export default function Registration() {
       </div>
     </div>
   );
-} 
+}

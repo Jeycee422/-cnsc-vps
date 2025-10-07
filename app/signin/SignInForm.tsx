@@ -56,6 +56,8 @@ export default function SignInForm() {
         router.push('/admin/dashboard');
       } else if (role === 'security_guard') {
         router.push('/security/scans');
+      } else if (role === 'system_admin') {
+        router.push('/system_admin/security_guards');
       } else {
         router.push('/user/home');
       }
